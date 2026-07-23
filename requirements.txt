@@ -1,0 +1,5 @@
+foundry-local-sdk
+streamlit
+numpy
+scikit-learn
+plotly
