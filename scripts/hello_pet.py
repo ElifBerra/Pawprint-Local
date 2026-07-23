@@ -6,6 +6,10 @@ def main():
     manager = FoundryLocalManager.instance
 
     model = manager.catalog.get_model("phi-3.5-mini")
+    
+    print("Downloading model...")
+    model.download()
+    
     print("Loading model...")
     model.load()
 
