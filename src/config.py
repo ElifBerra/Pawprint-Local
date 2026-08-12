@@ -25,7 +25,9 @@ CHUNK_SIZE = 200
 CHUNK_OVERLAP = 30
 
 # --- Retrieval -----------------------------------------------------------
-TOP_K = 3
+# How many chunks go into the prompt. Directly sets context length, which is
+# the dominant cost on CPU.
+TOP_K = 2
 
 # Cosine similarity below this means "not in our documents" — we skip the
 # model entirely and return the fallback message.
