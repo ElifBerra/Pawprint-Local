@@ -1,0 +1,10 @@
+# Normalize line endings so Windows and macOS checkouts don't show
+# every file as modified. Stored as LF in the repo, native in the working tree.
+* text=auto
+
+*.py    text diff=python
+*.md    text
+*.txt   text
+*.json  text
+*.ps1   text eol=crlf
+*.sh    text eol=lf
