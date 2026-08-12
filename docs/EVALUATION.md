@@ -144,20 +144,93 @@ ve doğruluk korundu. Model değiştirilmedi, donanım değiştirilmedi.
 
 ---
 
-## Koşu 4 — Daha küçük sohbet modeli
+## Koşu 4 — Başlık sınırlı chunk'lama
 
-`phi-3.5-mini` (3.8B) yerine `qwen2.5-1.5b-instruct`.
+Chunk'lar artık Markdown başlıklarını aşmıyor ve her chunk kendi başlık izini
+(`Nutrition and Feeding > Foods that are dangerous`) taşıyor.
 
-Gerekçe: parametre sayısı CPU'da süreyi neredeyse doğrusal etkiliyor. Beklenti
-belirgin hızlanma, olası bedel cevap kalitesinde düşüş. Ölçmeden karar
-verilemez.
+**Gerekçe — gerçek bir hatadan çıktı.** Çikolata sorusuna verilen cevap şuydu:
 
-| Metrik | phi-3.5-mini | qwen2.5-1.5b |
+> "Chocolate contains theobromine, which is toxic to pets **and can indicate
+> serious health issues like kidney disease, diabetes, or hyperadrenocorticism**."
+
+Bu ikinci kısım `nutrition-and-feeding.md`'nin **su tüketimi** bölümünden
+geliyordu; aşırı susamanın işaret ettiği hastalıklar listesi. 200 kelimelik
+pencere "Water" ve "Foods that are dangerous" bölümlerini tek chunk'a
+paketlemişti. Model doğru chunk'ı çekiyordu, chunk'ın kendisi iki konuluydu.
+
+Önce prompt'a "sadece soruyu doğrudan cevaplayan cümleleri kullan" kuralı
+eklendi. Bu, kene sorusundaki benzer bulaşmayı düzeltti ama çikolatayı
+düzeltmedi — yani prompt katmanı yapısal bir sorunu kapatmaya yetmiyor.
+
+| Metrik | Koşu 3 | Koşu 4 |
 |---|---|---|
-| Doğru cevaplanan | | |
-| Medyan gecikme | | |
+| Chunk sayısı | 23 | 44 |
+| Ortalama chunk boyutu | 995 karakter | 472 karakter |
+| Doğru cevaplanan | 6/6 | **5/6** |
+| Doğru "bilmiyorum" | 2/2 | 2/2 |
+| Medyan gecikme | 15.7s | 11.5s |
+| Kapsam içi skor aralığı | 0.480 – 0.629 | 0.504 – 0.759 |
+| Kapsam dışı en yüksek skor | 0.174 | **0.275** |
 
-**Yorum.**
+**Yorum.** Bulaşma düzeldi ve skorlar iyileşti, ama iki yeni sorun çıktı:
+
+1. **Gerileme:** "Why does my dog have bad breath?" cevaplanamaz oldu. Sorgudaki
+   "breath" kelimesi `emergency-signs.md`'nin **Breathing** bölümüyle eşleşti ve
+   `TOP_K=2` ile diş belgesi listeden düştü. Chunk'lar küçüldükçe kelime düzeyi
+   eşleşmeler öne çıkıyor.
+2. **Daralan pay:** Kapsam dışı en yüksek skor 0.174'ten 0.275'e çıktı. Küçük
+   chunk'lar ve başlık izleri taban benzerliğini yükseltiyor. Eşik 0.35 iken pay
+   sadece 0.075 kalmıştı.
+
+---
+
+## Koşu 5 — TOP_K 3, eşik 0.40
+
+Koşu 4'ün iki yan etkisini düzeltmek için.
+
+`TOP_K` 3'e çıkarıldı: chunk'lar 472 karaktere indiği için 2 tanesi artık bir
+konuyu kapsamıyor. `SIM_THRESHOLD` 0.40 yapıldı: en düşük kapsam içi skor 0.504,
+en yüksek kapsam dışı 0.275 — 0.40 ikisinin ortasında, her iki tarafa da pay
+bırakıyor.
+
+| Metrik | Koşu 4 | Koşu 5 |
+|---|---|---|
+| Doğru cevaplanan | 5/6 | **6/6** |
+| Doğru "bilmiyorum" | 2/2 | 2/2 |
+| Ortalama gecikme | 9.7s | 10.7s |
+| Medyan gecikme | 11.5s | 13.3s |
+| En yavaş | 15.4s | 17.0s |
+
+**Yorum.** Gerileme kapandı, 1.8 saniyelik gecikme artışı karşılığında.
+Doğruluk için makul bir bedel.
+
+---
+
+## Nihai durum
+
+| | Başlangıç | Son | Değişim |
+|---|---|---|---|
+| Medyan gecikme | 33.3s | 13.3s | **−60%** |
+| En yavaş soru | 49.9s | 17.0s | −66% |
+| Kapsam içi doğruluk | 6/6 | 6/6 | korundu |
+| Kapsam dışı doğruluk | 2/2 | 2/2 | korundu |
+| Bulaşma hatası | var | yok | düzeltildi |
+
+Nihai ayarlar: `chunk_size=200 overlap=30 top_k=3 max_tokens=256 threshold=0.40`,
+başlık sınırlı chunk'lama, `phi-3.5-mini` + `qwen3-embedding-0.6b`.
+
+Model değiştirilmedi, donanım değiştirilmedi. Kazancın tamamı chunk'lama
+stratejisi ve retrieval ayarlarından geldi.
+
+---
+
+## Denenmedi
+
+**Daha küçük sohbet modeli.** `qwen2.5-1.5b-instruct` (3.8B yerine 1.5B) CPU'da
+belirgin hızlanma sağlardı. Gecikme kabul edilebilir seviyeye indiği için
+denenmedi; cevap kalitesini riske atmaya değmedi. Daha yavaş bir donanımda ilk
+başvurulacak seçenek bu olurdu.
 
 ---
 

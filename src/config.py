@@ -26,12 +26,18 @@ CHUNK_OVERLAP = 30
 
 # --- Retrieval -----------------------------------------------------------
 # How many chunks go into the prompt. Directly sets context length, which is
-# the dominant cost on CPU.
-TOP_K = 2
+# the dominant cost on CPU. Raised back to 3 after heading-aware chunking made
+# chunks small enough that 2 no longer covered a topic: "why does my dog have
+# bad breath" matched the Breathing section of the emergency document and lost
+# the dental one.
+TOP_K = 3
 
 # Cosine similarity below this means "not in our documents" — we skip the
 # model entirely and return the fallback message.
-SIM_THRESHOLD = 0.35
+# Smaller chunks carrying heading trails raised baseline similarity, so an
+# out-of-scope question reached 0.275. Lowest in-scope score is 0.504, so 0.40
+# sits between them with room on both sides.
+SIM_THRESHOLD = 0.40
 
 # --- Generation ----------------------------------------------------------
 # Answers are short by design. 512 tokens gave the model room to drift into
