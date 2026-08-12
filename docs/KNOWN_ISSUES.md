@@ -40,6 +40,24 @@ Yapmazsan olmayan hatalar kovalarsın.
 
 ---
 
+## Streamlit konsolunda `[WinError 123] ... streamlit\static\*`
+
+Uygulama açılırken terminale uzun bir ASGI traceback'i düşüyor ve sonunda:
+
+```
+OSError: [WinError 123] Dosya adı, dizin adı veya birim etiketi sözdizimi hatalı:
+'...\venv\Lib\site-packages\streamlit\static\*'
+```
+
+**Zararsız.** Streamlit'in statik dosya sunucusunun Windows'ta joker karakterli
+bir yol denemesinden kaynaklanıyor. Arayüz normal çalışıyor, sorular
+cevaplanıyor, akış ve kaynaklar görünüyor.
+
+Demo sırasında terminali ekrana yansıtacaksanız uygulamayı önceden başlatın ki
+bu traceback izleyicinin gördüğü ilk şey olmasın.
+
+---
+
 ## Teşhis sırası
 
 Bir şey çalışmadığında sırayla:

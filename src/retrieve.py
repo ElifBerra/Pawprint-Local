@@ -72,11 +72,20 @@ def get_top_chunks(
     return results
 
 
-def is_relevant(results: Sequence[Retrieved]) -> bool:
+def is_relevant(
+    results: Sequence[Retrieved],
+    threshold: Optional[float] = None,
+) -> bool:
     """Whether the best match clears the similarity threshold.
 
     Below it we treat the question as out of scope and skip the model
     entirely: faster, and it removes any chance of the model inventing an
     answer from a weak match.
+
+    Args:
+        results: Ranked chunks, best first.
+        threshold: Override for config.SIM_THRESHOLD. The Streamlit sidebar
+            uses this so the threshold can be explored without a restart.
     """
-    return bool(results) and results[0].score >= config.SIM_THRESHOLD
+    limit = config.SIM_THRESHOLD if threshold is None else threshold
+    return bool(results) and results[0].score >= limit

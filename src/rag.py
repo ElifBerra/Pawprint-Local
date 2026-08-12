@@ -28,15 +28,22 @@ def unique_sources(results: Sequence[Retrieved]) -> List[str]:
     return seen
 
 
-def _prepare(question: str, chunks: Optional[Sequence[Chunk]]):
+def _prepare(
+    question: str,
+    chunks: Optional[Sequence[Chunk]],
+    k: Optional[int] = None,
+    threshold: Optional[float] = None,
+):
     """Shared front half of both answer paths: retrieve and build the prompt.
 
     Returns (results, system_prompt). system_prompt is None when the question
     is out of scope and the model should not be called at all.
     """
-    results = retrieve.get_top_chunks(question, chunks=chunks)
+    results = retrieve.get_top_chunks(
+        question, k=config.TOP_K if k is None else k, chunks=chunks
+    )
 
-    if not retrieve.is_relevant(results):
+    if not retrieve.is_relevant(results, threshold=threshold):
         logger.info(
             "Below threshold (best=%.3f), returning fallback",
             results[0].score if results else 0.0,
@@ -53,6 +60,8 @@ def _prepare(question: str, chunks: Optional[Sequence[Chunk]]):
 def answer_stream(
     question: str,
     chunks: Optional[Sequence[Chunk]] = None,
+    k: Optional[int] = None,
+    threshold: Optional[float] = None,
 ) -> Generator[str, None, Answer]:
     """Same as answer(), but yields the text as it is generated.
 
@@ -71,7 +80,7 @@ def answer_stream(
             used_fallback=True,
         )
 
-    results, system_prompt = _prepare(question, chunks)
+    results, system_prompt = _prepare(question, chunks, k, threshold)
 
     if system_prompt is None:
         yield config.FALLBACK_ANSWER
@@ -128,13 +137,20 @@ def _is_fallback(text: str) -> bool:
     return len(stripped) <= len(fallback) * 4
 
 
-def answer(question: str, chunks: Optional[Sequence[Chunk]] = None) -> Answer:
+def answer(
+    question: str,
+    chunks: Optional[Sequence[Chunk]] = None,
+    k: Optional[int] = None,
+    threshold: Optional[float] = None,
+) -> Answer:
     """Answer a question from the local document collection.
 
     Args:
         question: The user's question.
         chunks: Optional pre-loaded chunks, passed straight through to
             retrieval. Used by the tests.
+        k: Override for config.TOP_K.
+        threshold: Override for config.SIM_THRESHOLD.
     """
     started = time.perf_counter()
 
@@ -145,25 +161,16 @@ def answer(question: str, chunks: Optional[Sequence[Chunk]] = None) -> Answer:
             used_fallback=True,
         )
 
-    results = retrieve.get_top_chunks(question, chunks=chunks)
+    results, system_prompt = _prepare(question, chunks, k, threshold)
 
     # Nothing close enough — don't call the model at all.
-    if not retrieve.is_relevant(results):
-        logger.info(
-            "Below threshold (best=%.3f), returning fallback",
-            results[0].score if results else 0.0,
-        )
+    if system_prompt is None:
         return Answer(
             text=config.FALLBACK_ANSWER,
             retrieved=results,
             latency_s=time.perf_counter() - started,
             used_fallback=True,
         )
-
-    system_prompt = config.SYSTEM_PROMPT.format(
-        fallback=config.FALLBACK_ANSWER,
-        context=build_context(results),
-    )
 
     text = llm.generate(system_prompt, question)
     used_fallback = _is_fallback(text)
