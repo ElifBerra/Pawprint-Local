@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import List, Optional, Sequence
+from typing import Generator, List, Optional, Sequence
 
 from . import config, llm, retrieve
 from .models import Answer, Chunk, Retrieved
@@ -26,6 +26,77 @@ def unique_sources(results: Sequence[Retrieved]) -> List[str]:
         if r.chunk.source not in seen:
             seen.append(r.chunk.source)
     return seen
+
+
+def _prepare(question: str, chunks: Optional[Sequence[Chunk]]):
+    """Shared front half of both answer paths: retrieve and build the prompt.
+
+    Returns (results, system_prompt). system_prompt is None when the question
+    is out of scope and the model should not be called at all.
+    """
+    results = retrieve.get_top_chunks(question, chunks=chunks)
+
+    if not retrieve.is_relevant(results):
+        logger.info(
+            "Below threshold (best=%.3f), returning fallback",
+            results[0].score if results else 0.0,
+        )
+        return results, None
+
+    prompt = config.SYSTEM_PROMPT.format(
+        fallback=config.FALLBACK_ANSWER,
+        context=build_context(results),
+    )
+    return results, prompt
+
+
+def answer_stream(
+    question: str,
+    chunks: Optional[Sequence[Chunk]] = None,
+) -> Generator[str, None, Answer]:
+    """Same as answer(), but yields the text as it is generated.
+
+    Total time is unchanged; what changes is that the first words appear in a
+    couple of seconds instead of the reader watching a blank screen. Consume
+    with a for loop and read the final Answer from StopIteration.value, or use
+    the helper in cli.py.
+    """
+    started = time.perf_counter()
+
+    if not question or not question.strip():
+        yield "Please ask a question."
+        return Answer(
+            text="Please ask a question.",
+            latency_s=time.perf_counter() - started,
+            used_fallback=True,
+        )
+
+    results, system_prompt = _prepare(question, chunks)
+
+    if system_prompt is None:
+        yield config.FALLBACK_ANSWER
+        return Answer(
+            text=config.FALLBACK_ANSWER,
+            retrieved=results,
+            latency_s=time.perf_counter() - started,
+            used_fallback=True,
+        )
+
+    pieces: List[str] = []
+    for piece in llm.generate_streaming(system_prompt, question):
+        pieces.append(piece)
+        yield piece
+
+    text = "".join(pieces).strip()
+    used_fallback = _is_fallback(text)
+
+    return Answer(
+        text=text,
+        sources=[] if used_fallback else unique_sources(results),
+        retrieved=results,
+        latency_s=time.perf_counter() - started,
+        used_fallback=used_fallback,
+    )
 
 
 def _is_fallback(text: str) -> bool:

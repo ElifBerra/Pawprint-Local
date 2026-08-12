@@ -26,8 +26,19 @@ HELP = """
 DISCLAIMER = "This is not veterinary advice. See a vet for anything urgent."
 
 
-def print_answer(result: Answer) -> None:
-    print(f"\n{result.text}")
+def stream_answer(question: str) -> Answer:
+    """Print the answer as it arrives, then return the finished Answer."""
+    print()
+    generator = rag.answer_stream(question)
+    while True:
+        try:
+            print(next(generator), end="", flush=True)
+        except StopIteration as stop:
+            print()
+            return stop.value
+
+
+def print_footer(result: Answer) -> None:
     if result.sources:
         print(f"\nSources: {', '.join(result.sources)}")
     print(f"[{result.latency_s:.1f}s]")
@@ -85,8 +96,8 @@ def main() -> None:
                 print_sources(last)
                 continue
 
-            last = rag.answer(question)
-            print_answer(last)
+            last = stream_answer(question)
+            print_footer(last)
             print()
     finally:
         print("\nUnloading models...")
