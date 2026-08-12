@@ -100,17 +100,32 @@ def answer_stream(
 
 
 def _is_fallback(text: str) -> bool:
-    """Whether the model actually declined, rather than merely quoting the phrase.
+    """Whether the model declined to answer.
 
-    Small models sometimes emit the refusal sentence and then answer anyway. A
-    substring test treats those as refusals and hides the sources, so require
-    the reply to be essentially nothing but the fallback.
+    Two failure modes pull in opposite directions and this has to sit between
+    them:
+
+    - Requiring an exact match is too strict. The model often prefixes the
+      refusal: "I'm sorry, but the provided context does not contain
+      information regarding X. I don't have that information in my documents."
+      That is a correct refusal and the evaluation scored three of them as
+      failures before this was widened.
+    - Accepting the phrase anywhere is too loose. Earlier the model emitted the
+      refusal and then answered anyway, and a plain substring test hid the
+      sources of a real answer.
+
+    So: the phrase must be present and the reply must stay short. A refusal
+    with an apology runs to roughly three times the phrase; a refusal followed
+    by a smuggled answer runs much longer.
     """
     stripped = text.strip().strip('"').strip().lower()
     fallback = config.FALLBACK_ANSWER.lower()
+
     if not stripped:
         return True
-    return stripped.startswith(fallback) and len(stripped) < len(fallback) * 1.5
+    if fallback not in stripped:
+        return False
+    return len(stripped) <= len(fallback) * 4
 
 
 def answer(question: str, chunks: Optional[Sequence[Chunk]] = None) -> Answer:

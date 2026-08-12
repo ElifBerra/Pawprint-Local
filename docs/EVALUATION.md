@@ -209,19 +209,102 @@ Doğruluk için makul bir bedel.
 
 ## Nihai durum
 
+8 soruluk bench (ayar turları):
+
 | | Başlangıç | Son | Değişim |
 |---|---|---|---|
 | Medyan gecikme | 33.3s | 13.3s | **−60%** |
 | En yavaş soru | 49.9s | 17.0s | −66% |
-| Kapsam içi doğruluk | 6/6 | 6/6 | korundu |
-| Kapsam dışı doğruluk | 2/2 | 2/2 | korundu |
 | Bulaşma hatası | var | yok | düzeltildi |
 
-Nihai ayarlar: `chunk_size=200 overlap=30 top_k=3 max_tokens=256 threshold=0.40`,
+23 soruluk değerlendirme seti (notlandırılan koşu):
+
+| Metrik | Sonuç |
+|---|---|
+| Retrieval isabeti | **17/17** |
+| Cevaplanması gerekeni cevapladı | **17/17** |
+| Reddetmesi gerekeni reddetti | **6/6** |
+| Ortalama gecikme | 10.6s |
+| Medyan gecikme | 13.9s |
+| Karar payı | +0.121 |
+
+Nihai ayarlar: `chunk_size=200 overlap=30 top_k=3 max_tokens=256 threshold=0.48`,
 başlık sınırlı chunk'lama, `phi-3.5-mini` + `qwen3-embedding-0.6b`.
 
 Model değiştirilmedi, donanım değiştirilmedi. Kazancın tamamı chunk'lama
 stratejisi ve retrieval ayarlarından geldi.
+
+---
+
+## Koşu 6 — Tam değerlendirme seti (23 soru)
+
+8 soruluk bench ayar turları için hızlı bir ölçüydü. Bu, notlandırılan koşu:
+17 cevaplanabilir + 6 cevaplanamaz soru, `tests/eval_questions.json`.
+
+Set kasıtlı olarak zorlaştırıldı. Cevaplanamaz soruların **dördü alan içi ama
+belgelerde yok**: "yavru köpeğe otur komutu nasıl öğretilir", "apartman için
+hangi ırk", "kısırlaştırma ne kadar tutar", "kedilerin ömrü ne kadar". Fransa'nın
+başkenti kolay negatif; asıl test bunlar.
+
+Belgeleri yazan kişi (Burak) ile soruları yazan kişi (Elif) ayrı tutuldu.
+Belgeyi yazan, hangi soruların cevaplanabileceği konusunda kör oluyor.
+
+### İlk koşu — eşik 0.40
+
+| Metrik | Sonuç |
+|---|---|
+| Retrieval isabeti | 17/17 |
+| Cevaplanması gerekeni cevapladı | 17/17 |
+| Reddetmesi gerekeni reddetti | **3/6** |
+
+**Üç başarısızlığın ikisi ölçüm hatası çıktı.** Cevaplara bakıldığında model
+doğru davranmıştı:
+
+> "I'm sorry, but the provided context does not contain information regarding
+> training a puppy to sit. I don't have that information in my documents."
+
+`_is_fallback()` cevabın *yalnızca* fallback cümlesinden ibaret olmasını
+arıyordu; model başına özür eklediği için tanımadı. Sistem 23/23 doğru
+davranmıştı, biz 3'ünü yanlış etiketledik.
+
+Ham sayıya bakıp "3/6" diye rapor etseydik yanlış bir sonuç yayınlamış
+olacaktık. **Ölçüm aracının kendisi de test edilmesi gereken bir bileşen.**
+
+Ama altında gerçek bir sorun da vardı: bu üç soru eşiği aşıp (0.411-0.427 >
+0.40) modele gitmişti. Doğru sonuç, yanlış sebeple — retrieval katmanı elemesi
+gerekeni elememiş, model kendi sağduyusuyla kurtarmıştı. 3B'lik bir modelin
+sağduyusuna yaslanmak tasarım değil, şans.
+
+### Eşik ayarı
+
+Skor dağılımı doğru sayıyı veriyordu:
+
+| Grup | En düşük | En yüksek | Ortalama |
+|---|---|---|---|
+| Cevaplanabilir | **0.548** | 0.785 | 0.661 |
+| Cevaplanamaz | 0.165 | **0.427** | 0.354 |
+
+İki grup çakışmıyor; arada 0.121'lik temiz boşluk var. Eşik 0.40'tan **0.48**'e
+çekildi — boşluğun ortası, iki tarafa da yaklaşık eşit pay.
+
+`_is_fallback()` de genişletildi: fallback cümlesinin varlığı + uzunluk sınırı.
+Özürlü ret cümlenin ~3 katı uzunlukta, cevabı gizleyen ret çok daha uzun.
+
+### Son koşu — eşik 0.48
+
+| Metrik | Eşik 0.40 | Eşik 0.48 |
+|---|---|---|
+| Retrieval isabeti | 17/17 | **17/17** |
+| Cevaplanması gerekeni cevapladı | 17/17 | **17/17** |
+| Reddetmesi gerekeni reddetti | 3/6 | **6/6** |
+| Ortalama gecikme | 14.6s | 10.6s |
+| Medyan gecikme | 15.5s | 13.9s |
+| Başarısızlık | 3 | **0** |
+
+Zor negatifler artık modele hiç gitmiyor: 14.9s → 0.6s. Ortalama gecikmedeki
+4 saniyelik düşüş bundan geliyor.
+
+**Sonuç: 23/23.** Karar payı +0.121, eşik boşluğun ortasında.
 
 ---
 

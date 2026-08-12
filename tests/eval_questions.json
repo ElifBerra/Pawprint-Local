@@ -1,0 +1,125 @@
+[
+  {
+    "question": "How many DHPP doses does a puppy need before sixteen weeks?",
+    "answerable": true,
+    "expected_source": "vaccination-schedule.md",
+    "note": "specific detail, single section"
+  },
+  {
+    "question": "When should my kitten get its first rabies shot?",
+    "answerable": true,
+    "expected_source": "vaccination-schedule.md"
+  },
+  {
+    "question": "My dog's face swelled up after a vaccine. What should I do?",
+    "answerable": true,
+    "expected_source": "vaccination-schedule.md",
+    "note": "reaction section, should convey urgency"
+  },
+  {
+    "question": "Does my indoor cat need the FeLV vaccine?",
+    "answerable": true,
+    "expected_source": "vaccination-schedule.md",
+    "note": "conditional answer, tests nuance"
+  },
+  {
+    "question": "My dog's belly is swollen and he keeps trying to vomit but nothing comes out.",
+    "answerable": true,
+    "expected_source": "emergency-signs.md",
+    "note": "GDV, must be treated as an emergency"
+  },
+  {
+    "question": "Is open-mouth breathing normal for a cat?",
+    "answerable": true,
+    "expected_source": "emergency-signs.md"
+  },
+  {
+    "question": "What should I do if my dog ate a lily?",
+    "answerable": true,
+    "expected_source": "emergency-signs.md",
+    "note": "docs say lilies are toxic to CATS; watch for an overconfident answer"
+  },
+  {
+    "question": "How can I tell if my dog is a healthy weight?",
+    "answerable": true,
+    "expected_source": "nutrition-and-feeding.md"
+  },
+  {
+    "question": "How do I switch my cat to a new food without upsetting her stomach?",
+    "answerable": true,
+    "expected_source": "nutrition-and-feeding.md"
+  },
+  {
+    "question": "Is xylitol dangerous for dogs?",
+    "answerable": true,
+    "expected_source": "nutrition-and-feeding.md"
+  },
+  {
+    "question": "My cat hasn't eaten for two days. Should I worry?",
+    "answerable": true,
+    "expected_source": "common-symptoms.md",
+    "note": "hepatic lipidosis, cats differ from dogs here"
+  },
+  {
+    "question": "My dog is drinking a lot more water than usual.",
+    "answerable": true,
+    "expected_source": "common-symptoms.md"
+  },
+  {
+    "question": "How often should I worm an adult dog?",
+    "answerable": true,
+    "expected_source": "parasite-prevention.md"
+  },
+  {
+    "question": "I treated my cat for fleas but they came back. Why?",
+    "answerable": true,
+    "expected_source": "parasite-prevention.md",
+    "note": "environment vs animal, tests whether the reasoning survives"
+  },
+  {
+    "question": "Can I use my dog's flea treatment on my cat?",
+    "answerable": true,
+    "expected_source": "parasite-prevention.md",
+    "note": "permethrin, safety-critical"
+  },
+  {
+    "question": "Can I brush my dog's teeth with my own toothpaste?",
+    "answerable": true,
+    "expected_source": "dental-and-grooming.md"
+  },
+  {
+    "question": "My dog has a big mat behind his ear. Should I cut it out?",
+    "answerable": true,
+    "expected_source": "dental-and-grooming.md"
+  },
+  {
+    "question": "How do I train my puppy to sit?",
+    "answerable": false,
+    "note": "in domain but not covered - the hard negative"
+  },
+  {
+    "question": "Which dog breed is best for an apartment?",
+    "answerable": false,
+    "note": "in domain but not covered"
+  },
+  {
+    "question": "How much does it cost to neuter a cat?",
+    "answerable": false,
+    "note": "in domain but not covered"
+  },
+  {
+    "question": "How long do indoor cats usually live?",
+    "answerable": false,
+    "note": "in domain but not covered"
+  },
+  {
+    "question": "What is the capital of France?",
+    "answerable": false,
+    "note": "clearly out of domain, control"
+  },
+  {
+    "question": "Who won the World Cup in 1998?",
+    "answerable": false,
+    "note": "clearly out of domain, control"
+  }
+]

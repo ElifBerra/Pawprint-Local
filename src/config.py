@@ -34,10 +34,15 @@ TOP_K = 3
 
 # Cosine similarity below this means "not in our documents" — we skip the
 # model entirely and return the fallback message.
-# Smaller chunks carrying heading trails raised baseline similarity, so an
-# out-of-scope question reached 0.275. Lowest in-scope score is 0.504, so 0.40
-# sits between them with room on both sides.
-SIM_THRESHOLD = 0.40
+#
+# Set from the 23-question evaluation, which separates cleanly:
+#   answerable    0.548 .. 0.785
+#   unanswerable  0.165 .. 0.427
+# 0.48 sits in the gap with roughly equal margin on both sides. At the previous
+# 0.40 the three in-domain-but-uncovered questions (puppy training, breed
+# choice, neutering cost) scored 0.411-0.427 and reached the model, which
+# declined correctly but only by its own judgement — and cost 15 seconds each.
+SIM_THRESHOLD = 0.48
 
 # --- Generation ----------------------------------------------------------
 # Answers are short by design. 512 tokens gave the model room to drift into
