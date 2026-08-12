@@ -52,12 +52,56 @@ bir külliyatta `top_k=3` demek verinin dörtte birini modele göndermek demek.
 
 | Metrik | Koşu 1 | Koşu 2 |
 |---|---|---|
-| Chunk sayısı | 12 | |
-| Doğru cevaplanan | 6/6 | |
-| Doğru "bilmiyorum" | 2/2 | |
-| Medyan gecikme | 33.3s | |
+| Chunk sayısı | 12 | 23 |
+| Ortalama chunk boyutu | 1801 karakter | 995 karakter |
+| Doğru cevaplanan | 6/6 | 6/6 |
+| Doğru "bilmiyorum" | 2/2 | 2/2 |
+| Ortalama gecikme | 28.3s | 16.2s |
+| Medyan gecikme | 33.3s | **21.0s** |
+| En yavaş | 49.9s | 22.9s |
+| Kapsam içi skor aralığı | 0.425 – 0.602 | **0.480 – 0.629** |
+| Kapsam dışı skor aralığı | 0.142 – 0.144 | 0.149 – 0.174 |
 
-**Yorum.**
+**Yorum.** Beklenen hız kazancı geldi (medyan %37 düştü, en yavaş soru yarıya
+indi) ama asıl bulgu doğruluk tarafında: **kapsam içi benzerlik skorları
+yükseldi.** Bu sezgiye aykırı görünebilir, açıklaması şu: büyük bir chunk'ta
+farklı konulardaki paragraflar tek bir vektörde ortalanıyor ve sonuç "biraz her
+şeye benzeyen" bulanık bir temsil oluyor. Küçük chunk tek bir konuya ait
+olduğundan daha keskin bir sinyal veriyor.
+
+Bu, çekilen kaynaklarda somut olarak görülüyor:
+
+| Soru | Koşu 1 kaynakları | Koşu 2 kaynakları |
+|---|---|---|
+| Yavru aşı takvimi | vaccination-schedule, parasite-prevention | vaccination-schedule |
+| Kene çıkarma | parasite-prevention, dental-and-grooming | parasite-prevention |
+| Yavru kedi besleme | nutrition-and-feeding, vaccination-schedule | nutrition-and-feeding |
+
+Koşu 1'de alakasız ikinci bir kaynak sürükleniyordu; Koşu 2'de retrieval doğru
+belgede kalıyor. Kapsam dışı skorlar hafifçe yükseldi (0.144 → 0.174) ama eşiğin
+(0.35) hâlâ çok altında, karar sınırı güvende.
+
+**Sonuç: chunk boyutu bu projede yalnızca bir performans ayarı değil, doğruluk
+ayarı.** İkisi aynı yönde iyileşti, yani takas yok.
+
+---
+
+## Koşu 2b — Tekrarlanabilirlik
+
+Koşu 2 ayarları değiştirilmeden ikinci kez çalıştırıldı (ilk denemede
+`TOP_K` değişikliği kaydedilmemişti; kaza eseri faydalı bir ölçüm oldu).
+
+| Metrik | Koşu 2 | Koşu 2b | Fark |
+|---|---|---|---|
+| Ortalama | 16.2s | 16.3s | +0.1s |
+| Medyan | 21.0s | 20.0s | −1.0s |
+| En yavaş | 22.9s | 23.9s | +1.0s |
+
+Doğruluk ve çekilen kaynaklar birebir aynı — retrieval deterministik, tek
+değişkenlik üretim süresinde.
+
+**Ders:** Aynı ayarla ölçüm gürültüsü yaklaşık **±1 saniye**. Sonraki
+karşılaştırmalarda bu eşiğin altındaki farklar anlamlı sayılmadı.
 
 ---
 
@@ -66,12 +110,37 @@ bir külliyatta `top_k=3` demek verinin dörtte birini modele göndermek demek.
 Gerekçe: bağlamı üçte bir daha kısaltır. Risk, birden fazla belgeden bilgi
 birleştiren soruların bozulması ("çikolata" sorusu üç kaynaktan çekiyordu).
 
-| Metrik | Koşu 2 | Koşu 3 |
+| Metrik | Koşu 2b | Koşu 3 |
 |---|---|---|
-| Doğru cevaplanan | | |
-| Medyan gecikme | | |
+| Doğru cevaplanan | 6/6 | 6/6 |
+| Doğru "bilmiyorum" | 2/2 | 2/2 |
+| Ortalama gecikme | 16.3s | 12.8s |
+| Medyan gecikme | 20.0s | **15.7s** |
+| En yavaş | 23.9s | 20.5s |
 
-**Yorum.**
+**Yorum.** Medyan 4.3 saniye düştü — ölçüm gürültüsünün (±1s) belirgin biçimde
+üstünde, yani gerçek bir kazanç. Doğrulukta kayıp yok.
+
+Endişe edilen senaryo gerçekleşmedi: birden fazla belgeden bilgi birleştiren
+çikolata sorusu üç kaynaktan ikiye indi ama cevap aynı kaldı, çünkü kritik bilgi
+(theobromine, köpekler için toksik) zaten en yüksek skorlu iki chunk'ta
+bulunuyordu. Üçüncü chunk teyit ediyordu, bilgi eklemiyordu.
+
+Genel olarak Koşu 2'deki chunk küçültme işi bu değişikliği mümkün kıldı: chunk'lar
+tek konuya odaklandığı için 2 tanesi, eskiden 3 büyük chunk'ın taşıdığı bilgiyi
+taşıyor.
+
+### Buraya kadarki toplam
+
+| | Başlangıç | Şimdi | Değişim |
+|---|---|---|---|
+| Medyan gecikme | 33.3s | 15.7s | **−53%** |
+| En yavaş soru | 49.9s | 20.5s | −59% |
+| Kapsam içi doğruluk | 6/6 | 6/6 | değişmedi |
+| Kapsam dışı doğruluk | 2/2 | 2/2 | değişmedi |
+
+İki ayar değişikliğiyle (chunk 350→200, top_k 3→2) gecikme yarıdan fazla düştü
+ve doğruluk korundu. Model değiştirilmedi, donanım değiştirilmedi.
 
 ---
 
