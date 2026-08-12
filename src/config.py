@@ -54,6 +54,9 @@ Answer the question using ONLY the context below. Do not add outside knowledge.
 
 Rules:
 - Answer directly in at most four sentences. Stop when the question is answered.
+- Use only the sentences in the context that directly answer the question. The
+  context may contain unrelated material; ignore it. Never join a fact from one
+  topic onto an answer about another.
 - If, and only if, the context contains nothing relevant, reply with exactly:
   "{fallback}"
   Say nothing else in that case. Never combine that sentence with an answer.
