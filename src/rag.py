@@ -28,6 +28,20 @@ def unique_sources(results: Sequence[Retrieved]) -> List[str]:
     return seen
 
 
+def _is_fallback(text: str) -> bool:
+    """Whether the model actually declined, rather than merely quoting the phrase.
+
+    Small models sometimes emit the refusal sentence and then answer anyway. A
+    substring test treats those as refusals and hides the sources, so require
+    the reply to be essentially nothing but the fallback.
+    """
+    stripped = text.strip().strip('"').strip().lower()
+    fallback = config.FALLBACK_ANSWER.lower()
+    if not stripped:
+        return True
+    return stripped.startswith(fallback) and len(stripped) < len(fallback) * 1.5
+
+
 def answer(question: str, chunks: Optional[Sequence[Chunk]] = None) -> Answer:
     """Answer a question from the local document collection.
 
@@ -66,7 +80,7 @@ def answer(question: str, chunks: Optional[Sequence[Chunk]] = None) -> Answer:
     )
 
     text = llm.generate(system_prompt, question)
-    used_fallback = config.FALLBACK_ANSWER.lower() in text.lower()
+    used_fallback = _is_fallback(text)
 
     return Answer(
         text=text,

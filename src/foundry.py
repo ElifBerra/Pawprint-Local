@@ -106,6 +106,8 @@ def get_chat_client():
         client = model.get_chat_client()
         client.settings.max_tokens = config.MAX_TOKENS
         client.settings.temperature = config.TEMPERATURE
+        client.settings.top_p = config.TOP_P
+        client.settings.top_k = config.SAMPLING_TOP_K
         _clients["chat"] = client
     return _clients["chat"]
 

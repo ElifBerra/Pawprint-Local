@@ -21,8 +21,8 @@ EMBEDDING_MODEL_ALIAS = "qwen3-embedding-0.6b"
 
 # --- Chunking ------------------------------------------------------------
 # Words, not characters. Tuned during evaluation (see docs/EVALUATION.md).
-CHUNK_SIZE = 350
-CHUNK_OVERLAP = 50
+CHUNK_SIZE = 200
+CHUNK_OVERLAP = 30
 
 # --- Retrieval -----------------------------------------------------------
 TOP_K = 3
@@ -32,19 +32,30 @@ TOP_K = 3
 SIM_THRESHOLD = 0.35
 
 # --- Generation ----------------------------------------------------------
-MAX_TOKENS = 512
+# Answers are short by design. 512 tokens gave the model room to drift into
+# repetition loops on CPU, and every extra token costs real seconds here.
+MAX_TOKENS = 256
 TEMPERATURE = 0.2
+TOP_P = 0.9
+
+# Sampling pool size. This is the repetition lever that works on this runtime.
+# Named to avoid colliding with TOP_K above, which is the retrieval setting.
+# frequency_penalty and presence_penalty are accepted by the SDK but visibly
+# degrade phi-3.5-mini's output (see docs/EVALUATION.md), so they stay off.
+SAMPLING_TOP_K = 40
 
 FALLBACK_ANSWER = "I don't have that information in my documents."
 
 SYSTEM_PROMPT = """You are Pawprint, a pet health assistant.
 
-Answer ONLY using the context below. Do not use outside knowledge.
-If the context does not contain the answer, reply with exactly:
-"{fallback}"
+Answer the question using ONLY the context below. Do not add outside knowledge.
 
-Never give a diagnosis. For anything urgent or worsening, tell the user to
-contact a veterinarian.
+Rules:
+- Answer directly in at most four sentences. Stop when the question is answered.
+- If, and only if, the context contains nothing relevant, reply with exactly:
+  "{fallback}"
+  Say nothing else in that case. Never combine that sentence with an answer.
+- Do not diagnose. For urgent or worsening problems, say to contact a vet.
 
 Context:
 {context}"""
