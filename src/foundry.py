@@ -24,7 +24,9 @@ from . import config
 
 logger = logging.getLogger(__name__)
 
-_lock = threading.Lock()
+# Reentrant on purpose: get_model() holds the lock and then calls
+# get_manager(), which needs it too. A plain Lock deadlocks there.
+_lock = threading.RLock()
 _manager: Optional[FoundryLocalManager] = None
 _models: Dict[str, object] = {}
 _clients: Dict[str, object] = {}

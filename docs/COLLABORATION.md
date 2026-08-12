@@ -76,3 +76,42 @@ Kesişen yerler (`config.py`, `REPORT.md`) birlikte yazılır → `Co-authored-b
 Değerlendirme setini yazan kişinin belgeleri yazan kişiden farklı olması testin
 kalitesini artırır — o yüzden `data/docs/` ve `eval_questions.json` aynı kişide
 kalmasın diye bölünmedi, ikisi de Burak'ta ama farklı günlerde yazılacak.
+
+## Arayüz sözleşmesi
+
+İki taraf paralel ilerleyebilsin diye ortak tipler `src/models.py` içinde tanımlı:
+`Chunk`, `Retrieved`, `Answer`. İkisi de buradan import eder.
+
+Burak'ın yazacağı `src/db.py` şu fonksiyonları sağlamalı — sorgu tarafı bunlara göre yazıldı:
+
+```python
+def init_db() -> None:
+    """Create the chunks table if it does not exist."""
+
+def insert_chunks(chunks: list[Chunk]) -> None:
+    """Persist chunks with their embeddings. Embedding as BLOB:
+    np.asarray(vec, dtype=np.float32).tobytes()"""
+
+def load_all_chunks() -> list[Chunk]:
+    """Every chunk with its embedding decoded back into np.ndarray
+    via np.frombuffer(blob, dtype=np.float32)."""
+
+def clear() -> None:
+    """Delete all rows. Used by ingest --rebuild."""
+
+def count() -> int:
+    """Number of stored chunks."""
+```
+
+`src/chunking.py`:
+
+```python
+def split_document(text: str, source: str) -> list[Chunk]:
+    """Paragraph-aware split, CHUNK_SIZE words with CHUNK_OVERLAP overlap.
+    chunk_index starts at 0. embedding stays None here — ingest fills it."""
+```
+
+`src/ingest.py`: `data/docs/*.md` oku → `split_document` → `embeddings.embed_texts`
+→ `insert_chunks`. `python -m src.ingest --rebuild` ile sıfırdan kurulabilmeli.
+
+Bu imzalar değişirse sorgu tarafı kırılır — değiştirmeden önce haber verin.
