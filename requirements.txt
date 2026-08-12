@@ -1,5 +1,5 @@
 foundry-local-sdk
-streamlit
+openai
 numpy
-scikit-learn
-plotly
+streamlit
+pytest
