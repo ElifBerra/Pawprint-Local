@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pawprint Local</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐾</text></svg>">
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ---------- Sidebar ---------- -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">🐾</div>
+      <div class="brand-text">
+        <strong>Pawprint</strong>
+        <span>Local</span>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <button class="nav-item is-active" data-section="profile">
+        <span class="nav-icon">🐕</span><span data-i18n="nav.profile">Pet Profili</span>
+      </button>
+      <button class="nav-item" data-section="records">
+        <span class="nav-icon">📋</span><span data-i18n="nav.records">Sağlık Kaydı</span>
+      </button>
+      <button class="nav-item" data-section="ask">
+        <span class="nav-icon">💬</span><span data-i18n="nav.ask">Soru-Cevap</span>
+      </button>
+      <button class="nav-item" data-section="insights">
+        <span class="nav-icon">📊</span><span data-i18n="nav.insights">İçgörüler</span>
+      </button>
+      <button class="nav-item" data-section="report">
+        <span class="nav-icon">📄</span><span data-i18n="nav.report">Vet Raporu</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button class="lang-btn is-active" data-lang="tr">TR</button>
+        <button class="lang-btn" data-lang="en">EN</button>
+      </div>
+
+      <div class="offline-card">
+        <span class="dot"></span>
+        <div>
+          <strong data-i18n="offline.title">Çevrimdışı</strong>
+          <span data-i18n="offline.detail">Tüm veriler ve model bu cihazda.</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ---------- Main ---------- -->
+  <main class="main">
+
+    <header class="topbar">
+      <div>
+        <h1 id="page-title" data-i18n="nav.profile">Pet Profili</h1>
+        <p class="subtitle" id="pet-line">—</p>
+      </div>
+      <div class="badge badge-offline">
+        <span class="lock">🔒</span> 100% <span data-i18n="offline.badge">Çevrimdışı</span>
+      </div>
+    </header>
+
+    <div class="content">
+
+      <!-- ===== Profile ===== -->
+      <section class="section is-active" id="section-profile">
+        <form class="card" id="pet-form">
+          <h2 class="card-title"><span>🐾</span><span data-i18n="profile.basic">Temel Bilgiler</span></h2>
+
+          <div class="grid-2">
+            <label class="field">
+              <span data-i18n="profile.name">İsim</span>
+              <input name="name" required>
+            </label>
+            <label class="field">
+              <span data-i18n="profile.species">Tür</span>
+              <select name="species">
+                <option value="dog" data-i18n="species.dog">Köpek</option>
+                <option value="cat" data-i18n="species.cat">Kedi</option>
+              </select>
+            </label>
+            <label class="field">
+              <span data-i18n="profile.breed">Irk</span>
+              <input name="breed">
+            </label>
+            <label class="field">
+              <span data-i18n="profile.birth">Doğum Tarihi</span>
+              <input name="birth_date" type="date">
+            </label>
+            <label class="field">
+              <span data-i18n="profile.target">Hedef Kilo (kg)</span>
+              <input name="target_weight_kg" type="number" step="0.1" min="0">
+            </label>
+            <label class="field">
+              <span data-i18n="profile.sex">Cinsiyet</span>
+              <select name="sex">
+                <option value="female" data-i18n="sex.female">Dişi</option>
+                <option value="male" data-i18n="sex.male">Erkek</option>
+              </select>
+            </label>
+            <label class="field span-2">
+              <span data-i18n="profile.owner">Sahibi</span>
+              <input name="owner_name">
+            </label>
+          </div>
+
+          <div class="actions">
+            <button type="reset" class="btn btn-ghost" data-i18n="action.cancel">İptal</button>
+            <button type="submit" class="btn btn-primary">
+              <span>💾</span><span data-i18n="action.save">Kaydet</span>
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <!-- ===== Records ===== -->
+      <section class="section" id="section-records">
+        <form class="card" data-record="weight">
+          <h2 class="card-title"><span>⚖️</span><span data-i18n="rec.weight">Kilo Ölçümü</span></h2>
+          <div class="grid-2">
+            <label class="field">
+              <span data-i18n="rec.date">Tarih</span>
+              <input name="recorded_on" type="date" required>
+            </label>
+            <label class="field">
+              <span data-i18n="rec.kg">Kilo (kg)</span>
+              <input name="weight_kg" type="number" step="0.1" min="0" required>
+            </label>
+          </div>
+          <div class="actions">
+            <button class="btn btn-primary" data-i18n="action.add">Kaydı Ekle</button>
+          </div>
+        </form>
+
+        <form class="card" data-record="feeding">
+          <h2 class="card-title"><span>🍖</span><span data-i18n="rec.feeding">Beslenme</span></h2>
+          <div class="grid-2">
+            <label class="field">
+              <span data-i18n="rec.date">Tarih</span>
+              <input name="recorded_on" type="date" required>
+            </label>
+            <label class="field">
+              <span data-i18n="rec.brand">Yiyecek Markası</span>
+              <input name="food_brand" required>
+            </label>
+            <label class="field">
+              <span data-i18n="rec.portion">Porsiyon (bardak)</span>
+              <input name="portion_cups" type="number" step="0.1" min="0" required>
+            </label>
+            <label class="field">
+              <span data-i18n="rec.meals">Günlük Öğün</span>
+              <input name="meals_per_day" type="number" step="1" min="1" max="10">
+            </label>
+          </div>
+          <div class="actions">
+            <button class="btn btn-primary" data-i18n="action.add">Kaydı Ekle</button>
+          </div>
+        </form>
+
+        <form class="card" data-record="stool">
+          <h2 class="card-title"><span>💩</span><span data-i18n="rec.stool">Dışkı</span></h2>
+          <div class="grid-2">
+            <label class="field">
+              <span data-i18n="rec.date">Tarih</span>
+              <input name="recorded_on" type="date" required>
+            </label>
+            <label class="field">
+              <span data-i18n="rec.quality">Kalite</span>
+              <select name="quality">
+                <option value="normal" data-i18n="stool.normal">Normal</option>
+                <option value="soft" data-i18n="stool.soft">Yumuşak</option>
+                <option value="loose" data-i18n="stool.loose">Sulu</option>
+                <option value="hard" data-i18n="stool.hard">Sert</option>
+              </select>
+            </label>
+            <label class="field">
+              <span data-i18n="rec.frequency">Frekans (gün)</span>
+              <input name="frequency_per_day" type="number" step="0.5" min="0" max="20">
+            </label>
+          </div>
+          <div class="actions">
+            <button class="btn btn-primary" data-i18n="action.add">Kaydı Ekle</button>
+          </div>
+        </form>
+
+        <div class="card">
+          <h2 class="card-title"><span>🕓</span><span data-i18n="rec.recent">Son Kayıtlar</span></h2>
+          <div id="records-list" class="record-list"></div>
+        </div>
+      </section>
+
+      <!-- ===== Ask ===== -->
+      <section class="section" id="section-ask">
+        <div class="card card-chat">
+          <div id="chat" class="chat">
+            <div class="chat-empty" id="chat-empty">
+              <p data-i18n="ask.empty">Bella'nın kayıtlarını ve belge koleksiyonunu birlikte kullanarak cevaplıyorum.</p>
+              <div class="suggestions" id="suggestions"></div>
+            </div>
+          </div>
+
+          <form class="composer" id="ask-form">
+            <input id="question" autocomplete="off"
+                   data-i18n-placeholder="ask.placeholder"
+                   placeholder="Sorunuzu yazın...">
+            <button class="btn btn-primary" id="ask-btn" data-i18n="action.send">Gönder</button>
+          </form>
+          <p class="composer-note" id="lang-note"></p>
+        </div>
+      </section>
+
+      <!-- ===== Insights ===== -->
+      <section class="section" id="section-insights">
+        <div class="metrics" id="metrics"></div>
+
+        <div class="card">
+          <h2 class="card-title"><span>📈</span><span data-i18n="ins.trend">Kilo Trendi</span></h2>
+          <div id="chart"></div>
+        </div>
+
+        <div class="card">
+          <h2 class="card-title"><span>🔍</span><span data-i18n="ins.findings">Bulgular</span></h2>
+          <div id="insight-list" class="insight-list"></div>
+        </div>
+      </section>
+
+      <!-- ===== Report ===== -->
+      <section class="section" id="section-report">
+        <div class="card">
+          <div class="card-head">
+            <h2 class="card-title"><span>📄</span><span data-i18n="rep.title">Veteriner Raporu</span></h2>
+            <a class="btn btn-primary" id="pdf-link" href="/api/report.pdf">
+              <span>⬇️</span><span data-i18n="rep.download">PDF İndir</span>
+            </a>
+          </div>
+          <div id="report-body" class="report"></div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="i18n.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

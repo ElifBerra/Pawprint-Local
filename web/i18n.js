@@ -1,0 +1,178 @@
+/* Interface strings.
+   These are ours, so both languages are complete. The answer text is a
+   separate matter — see the note under the composer. */
+
+const I18N = {
+  tr: {
+    "nav.profile": "Pet Profili",
+    "nav.records": "Sağlık Kaydı",
+    "nav.ask": "Soru-Cevap",
+    "nav.insights": "İçgörüler",
+    "nav.report": "Vet Raporu",
+
+    "offline.title": "Çevrimdışı",
+    "offline.detail": "Tüm veriler ve model bu cihazda.",
+    "offline.badge": "Çevrimdışı",
+
+    "profile.basic": "Temel Bilgiler",
+    "profile.name": "İsim",
+    "profile.species": "Tür",
+    "profile.breed": "Irk",
+    "profile.birth": "Doğum Tarihi",
+    "profile.target": "Hedef Kilo (kg)",
+    "profile.sex": "Cinsiyet",
+    "profile.owner": "Sahibi",
+    "species.dog": "Köpek",
+    "species.cat": "Kedi",
+    "sex.female": "Dişi",
+    "sex.male": "Erkek",
+
+    "rec.weight": "Kilo Ölçümü",
+    "rec.feeding": "Beslenme",
+    "rec.stool": "Dışkı",
+    "rec.date": "Tarih",
+    "rec.kg": "Kilo (kg)",
+    "rec.brand": "Yiyecek Markası",
+    "rec.portion": "Porsiyon (bardak)",
+    "rec.meals": "Günlük Öğün",
+    "rec.quality": "Kalite",
+    "rec.frequency": "Frekans (gün)",
+    "rec.recent": "Son Kayıtlar",
+    "stool.normal": "Normal",
+    "stool.soft": "Yumuşak",
+    "stool.loose": "Sulu",
+    "stool.hard": "Sert",
+
+    "action.save": "Kaydet",
+    "action.cancel": "İptal",
+    "action.add": "Kaydı Ekle",
+    "action.send": "Gönder",
+
+    "ask.empty": "Belge koleksiyonunu ve hayvanın kendi kayıtlarını birlikte kullanarak cevaplıyorum.",
+    "ask.placeholder": "Sorunuzu yazın...",
+    "ask.thinking": "Düşünüyor",
+    "ask.passages": "Kullanılan pasajlar",
+    "ask.records_used": "kayıtlar kullanıldı",
+    "ask.no_match": "eşleşme yok",
+    "ask.lang_note": "Cevaplar İngilizce. Yerel modellerin Türkçe üretimi ölçüldü ve yeterli bulunmadı; ayrıntı docs/EVALUATION.md içinde. Arayüz, içgörüler ve vet raporu tamamen Türkçe.",
+
+    "ins.trend": "Kilo Trendi",
+    "ins.findings": "Bulgular",
+    "ins.current": "Mevcut Kilo (kg)",
+    "ins.target": "Hedef Kilo (kg)",
+    "ins.stool": "Dışkı Kalitesi",
+    "ins.over": "hedefin üzerinde",
+    "ins.under": "hedefin altında",
+    "ins.ontarget": "hedefte",
+    "ins.weeks": "hafta",
+    "ins.normal": "normal",
+    "ins.nodata": "Yeterli veri yok",
+    "level.warning": "Uyarı",
+    "level.positive": "Olumlu",
+    "level.suggestion": "Öneri",
+
+    "rep.title": "Veteriner Raporu",
+    "rep.download": "PDF İndir",
+
+    "toast.saved": "Kaydedildi",
+    "toast.added": "Kayıt eklendi",
+    "toast.error": "Bir sorun oluştu",
+    "toast.nopet": "Önce bir pet profili oluşturun",
+  },
+
+  en: {
+    "nav.profile": "Pet Profile",
+    "nav.records": "Health Record",
+    "nav.ask": "Ask",
+    "nav.insights": "Insights",
+    "nav.report": "Vet Report",
+
+    "offline.title": "Offline",
+    "offline.detail": "All data and the model are on this device.",
+    "offline.badge": "Offline",
+
+    "profile.basic": "Basic Information",
+    "profile.name": "Name",
+    "profile.species": "Species",
+    "profile.breed": "Breed",
+    "profile.birth": "Date of Birth",
+    "profile.target": "Target Weight (kg)",
+    "profile.sex": "Sex",
+    "profile.owner": "Owner",
+    "species.dog": "Dog",
+    "species.cat": "Cat",
+    "sex.female": "Female",
+    "sex.male": "Male",
+
+    "rec.weight": "Weight Measurement",
+    "rec.feeding": "Feeding",
+    "rec.stool": "Stool",
+    "rec.date": "Date",
+    "rec.kg": "Weight (kg)",
+    "rec.brand": "Food Brand",
+    "rec.portion": "Portion (cups)",
+    "rec.meals": "Meals per Day",
+    "rec.quality": "Quality",
+    "rec.frequency": "Frequency (per day)",
+    "rec.recent": "Recent Records",
+    "stool.normal": "Normal",
+    "stool.soft": "Soft",
+    "stool.loose": "Loose",
+    "stool.hard": "Hard",
+
+    "action.save": "Save",
+    "action.cancel": "Cancel",
+    "action.add": "Add Record",
+    "action.send": "Send",
+
+    "ask.empty": "I answer from the document collection together with this animal's own records.",
+    "ask.placeholder": "Type your question...",
+    "ask.thinking": "Thinking",
+    "ask.passages": "Passages used",
+    "ask.records_used": "records used",
+    "ask.no_match": "no match",
+    "ask.lang_note": "Answers are in English. Turkish generation was measured across four local models and none met the bar — see docs/EVALUATION.md. The interface, insights and vet report are fully translated.",
+
+    "ins.trend": "Weight Trend",
+    "ins.findings": "Findings",
+    "ins.current": "Current Weight (kg)",
+    "ins.target": "Target Weight (kg)",
+    "ins.stool": "Stool Quality",
+    "ins.over": "above target",
+    "ins.under": "below target",
+    "ins.ontarget": "on target",
+    "ins.weeks": "weeks",
+    "ins.normal": "normal",
+    "ins.nodata": "Not enough data",
+    "level.warning": "Warning",
+    "level.positive": "Positive",
+    "level.suggestion": "Suggestion",
+
+    "rep.title": "Veterinary Report",
+    "rep.download": "Download PDF",
+
+    "toast.saved": "Saved",
+    "toast.added": "Record added",
+    "toast.error": "Something went wrong",
+    "toast.nopet": "Create a pet profile first",
+  },
+};
+
+const SUGGESTIONS = {
+  tr: [
+    "How many DHPP doses does a puppy need?",
+    "Should I reduce Bella's portion?",
+    "Can I use my dog's flea treatment on my cat?",
+    "How do I train my puppy to sit?",
+  ],
+  en: [
+    "How many DHPP doses does a puppy need?",
+    "Should I reduce Bella's portion?",
+    "Can I use my dog's flea treatment on my cat?",
+    "How do I train my puppy to sit?",
+  ],
+};
+
+function t(key, lang) {
+  return (I18N[lang] && I18N[lang][key]) || I18N.en[key] || key;
+}
