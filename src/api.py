@@ -19,7 +19,7 @@ from typing import List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from . import config, db, foundry, insights, pets_db, rag, report
 from .models import FeedingRecord, Pet, StoolRecord, WeightRecord
@@ -44,22 +44,37 @@ class PetIn(BaseModel):
     id: Optional[int] = None
 
 
-class WeightIn(BaseModel):
+class RecordIn(BaseModel):
+    """Shared date validation.
+
+    A record dated in the future silently distorts every trend, because they
+    are all computed from the most recent weighing. Cheaper to reject here than
+    to explain the resulting numbers later.
+    """
+
     recorded_on: date
+
+    @field_validator("recorded_on")
+    @classmethod
+    def not_in_the_future(cls, value: date) -> date:
+        if value > date.today():
+            raise ValueError("recorded_on cannot be in the future")
+        return value
+
+
+class WeightIn(RecordIn):
     weight_kg: float = Field(gt=0, lt=200)
 
 
-class FeedingIn(BaseModel):
-    recorded_on: date
+class FeedingIn(RecordIn):
     food_brand: str
     portion_cups: float = Field(gt=0, lt=50)
     meals_per_day: Optional[int] = Field(default=None, ge=1, le=10)
     note: Optional[str] = None
 
 
-class StoolIn(BaseModel):
-    recorded_on: date
-    quality: str
+class StoolIn(RecordIn):
+    quality: str = Field(pattern="^(normal|soft|loose|hard)$")
     frequency_per_day: Optional[float] = Field(default=None, ge=0, le=20)
 
 

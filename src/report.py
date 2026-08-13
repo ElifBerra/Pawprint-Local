@@ -216,11 +216,73 @@ def _lines(data: dict) -> List[str]:
     return out
 
 
+# ReportLab's built-in Helvetica uses WinAnsi encoding, which has no ş, ı, ğ or
+# İ — Turkish text came out as black squares. A TrueType font has to be
+# registered instead. Rather than committing a font file, look for one already
+# on the machine; every platform ships something with full Latin-1 coverage.
+_FONT_CANDIDATES = [
+    # (regular, bold, italic)
+    ("C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/arialbd.ttf",
+     "C:/Windows/Fonts/ariali.ttf"),
+    ("C:/Windows/Fonts/calibri.ttf", "C:/Windows/Fonts/calibrib.ttf",
+     "C:/Windows/Fonts/calibrii.ttf"),
+    ("/System/Library/Fonts/Supplemental/Arial.ttf",
+     "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+     "/System/Library/Fonts/Supplemental/Arial Italic.ttf"),
+    ("/Library/Fonts/Arial.ttf", "/Library/Fonts/Arial Bold.ttf",
+     "/Library/Fonts/Arial Italic.ttf"),
+    ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf"),
+]
+
+_FONTS_REGISTERED = False
+FONT = "Helvetica"
+FONT_BOLD = "Helvetica-Bold"
+FONT_ITALIC = "Helvetica-Oblique"
+
+
+def _register_fonts() -> None:
+    """Register a Unicode font family, falling back to the built-ins."""
+    global _FONTS_REGISTERED, FONT, FONT_BOLD, FONT_ITALIC
+    if _FONTS_REGISTERED:
+        return
+    _FONTS_REGISTERED = True
+
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+
+    for regular, bold, italic in _FONT_CANDIDATES:
+        if not Path(regular).exists():
+            continue
+        try:
+            pdfmetrics.registerFont(TTFont("Report", regular))
+            FONT = "Report"
+            for name, path in (("Report-Bold", bold), ("Report-Italic", italic)):
+                if Path(path).exists():
+                    pdfmetrics.registerFont(TTFont(name, path))
+                    if name.endswith("Bold"):
+                        FONT_BOLD = name
+                    else:
+                        FONT_ITALIC = name
+            # Missing weights fall back to the regular face rather than to
+            # Helvetica, which would reintroduce the encoding problem.
+            if FONT_BOLD == "Helvetica-Bold":
+                FONT_BOLD = FONT
+            if FONT_ITALIC == "Helvetica-Oblique":
+                FONT_ITALIC = FONT
+            return
+        except Exception:  # unreadable or unsupported file, try the next one
+            continue
+
+
 def write_pdf(pet: Pet, lang: str = config.DEFAULT_LANGUAGE) -> Path:
     """Render the report to a PDF and return its path."""
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.pdfgen import canvas
+
+    _register_fonts()
 
     data = build(pet, lang)
     t = data["labels"]
@@ -258,44 +320,48 @@ def write_pdf(pet: Pet, lang: str = config.DEFAULT_LANGUAGE) -> Path:
             page.drawString(left + indent, y, line)
             y -= size + 2.5
 
-    page.setFont("Helvetica-Bold", 17)
+    page.setFont(FONT_BOLD, 17)
     page.drawString(left, y, f"{t['title']} — {pet.name}")
     y -= 8 * mm
-    page.setFont("Helvetica", 8.5)
+    page.setFont(FONT, 8.5)
     page.setFillColorRGB(0.42, 0.42, 0.45)
     page.drawString(left, y, f"{t['generated']}: {data['generated_on']}")
     page.setFillColorRGB(0, 0, 0)
     y -= 6 * mm
     rule(0.9)
 
-    for line in _lines(data):
-        if y < 34 * mm:
+    lines = _lines(data)
+    for index, line in enumerate(lines):
+        # A heading alone at the foot of a page reads as if the section were
+        # empty, so carry it over with at least one line of its content.
+        needed = 34 * mm if not line.startswith("## ") else 48 * mm
+        if y < needed:
             page.showPage()
             y = height - 22 * mm
 
         if line.startswith("## "):
             y -= 3 * mm
-            page.setFont("Helvetica-Bold", 10)
+            page.setFont(FONT_BOLD, 10)
             page.drawString(left, y, line[3:])
             y -= 4.5 * mm
             rule()
         elif line.startswith(">"):
-            wrapped(line[1:], "Helvetica-Oblique", 9.5, indent=4)
+            wrapped(line[1:], FONT_ITALIC, 9.5, indent=4)
             y -= 1.5 * mm
         elif line.startswith("-"):
-            wrapped(line[1:], "Helvetica", 9.5, indent=8)
+            wrapped(line[1:], FONT, 9.5, indent=8)
         else:
             label, _, value = line.partition("|")
-            page.setFont("Helvetica", 9.5)
+            page.setFont(FONT, 9.5)
             page.setFillColorRGB(0.35, 0.35, 0.38)
             page.drawString(left + 4, y, label)
             page.setFillColorRGB(0, 0, 0)
-            page.setFont("Helvetica-Bold", 9.5)
+            page.setFont(FONT_BOLD, 9.5)
             page.drawRightString(right - 4, y, value)
             y -= 5.6 * mm
 
     y = max(y, 20 * mm)
-    page.setFont("Helvetica", 7.5)
+    page.setFont(FONT, 7.5)
     page.setFillColorRGB(0.45, 0.45, 0.48)
     for chunk in _split(t["footer"], 110):
         page.drawString(left, y, chunk)

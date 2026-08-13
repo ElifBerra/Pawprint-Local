@@ -29,10 +29,38 @@ PORTION_GUIDE: Dict[str, float] = {
 WEIGHT_TREND_WEEKS = 3
 STOOL_WINDOW_DAYS = 30
 
-# Over this fraction above target weight, say something.
+# Beyond this fraction from target weight, say something. Applies both ways.
 OVERWEIGHT_FRACTION = 0.05
-# Gain over the trend window that is worth flagging, in kg.
+# Change over the trend window that is worth flagging, in kg.
 GAIN_THRESHOLD_KG = 0.5
+LOSS_THRESHOLD_KG = 0.5
+
+# Unexplained loss of this share of body weight is a clinical red flag, not a
+# diet working. Treated more urgently than the equivalent gain.
+RAPID_LOSS_FRACTION = 0.05
+
+# Two consecutive weighings differing by more than this are almost certainly a
+# typo rather than a real change. Saying so is more useful than computing a
+# trend from bad data.
+IMPLAUSIBLE_JUMP_FRACTION = 0.25
+
+
+_MONTHS = {
+    "tr": ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
+           "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"],
+    "en": ["January", "February", "March", "April", "May", "June",
+           "July", "August", "September", "October", "November", "December"],
+}
+
+
+def format_date(value: date, lang: str = "en") -> str:
+    """Spell out a date in the given language.
+
+    strftime("%B") follows the system locale, which put "13 July 2026" in the
+    middle of an otherwise Turkish sentence.
+    """
+    months = _MONTHS.get(lang, _MONTHS["en"])
+    return f"{value.day} {months[value.month - 1]} {value.year}"
 
 
 def portion_guidance(brand: Optional[str]) -> Optional[float]:
@@ -96,13 +124,71 @@ def generate(pet: Pet) -> List[Insight]:
     found: List[Insight] = []
     data = summary(pet)
 
+    # Data quality first: if the numbers are not trustworthy, say so before
+    # drawing conclusions from them.
+    _check_data_quality(pet, found)
     _check_weight_and_food(pet, data, found)
+    _check_weight_loss(pet, data, found)
     _check_portion(data, found)
     _check_target(data, found)
     _check_stool(data, found)
     _check_missing_data(pet, data, found)
 
     return found
+
+
+def _check_data_quality(pet: Pet, out: List[Insight]) -> None:
+    """Flag weighings that cannot be real, and dates in the future."""
+    records = pets_db.weights(pet.id)
+
+    for previous, current in zip(records, records[1:]):
+        if previous.weight_kg <= 0:
+            continue
+        jump = abs(current.weight_kg - previous.weight_kg) / previous.weight_kg
+        if jump < IMPLAUSIBLE_JUMP_FRACTION:
+            continue
+        out.append(Insight(
+            level="warning",
+            title_en="A weighing looks like a typing error",
+            title_tr="Bir tartım giriş hatası gibi görünüyor",
+            detail_en=(
+                f"{format_date(previous.recorded_on, 'en')}: "
+                f"{previous.weight_kg} kg, then "
+                f"{format_date(current.recorded_on, 'en')}: "
+                f"{current.weight_kg} kg — a change of "
+                f"{jump * 100:.0f}% between two weighings. Check the record; "
+                f"the trend and the recommendations below are computed from "
+                f"these numbers."
+            ),
+            detail_tr=(
+                f"{format_date(previous.recorded_on, 'tr')}: "
+                f"{previous.weight_kg} kg iken "
+                f"{format_date(current.recorded_on, 'tr')}: "
+                f"{current.weight_kg} kg — iki tartım arasında %{jump * 100:.0f} "
+                f"değişim var. Kaydı kontrol edin; aşağıdaki trend ve öneriler "
+                f"bu sayılardan hesaplanıyor."
+            ),
+        ))
+        break  # one such warning is enough to make the point
+
+    future = [r for r in records if r.recorded_on > date.today()]
+    if future:
+        latest = max(r.recorded_on for r in future)
+        out.append(Insight(
+            level="warning",
+            title_en="A record is dated in the future",
+            title_tr="İleri tarihli kayıt var",
+            detail_en=(
+                f"{len(future)} weighing(s) are dated after today, the latest "
+                f"being {format_date(latest, 'en')}. Trends are computed from "
+                f"the most recent record, so a future date distorts them."
+            ),
+            detail_tr=(
+                f"{len(future)} tartım bugünden sonraki bir tarihe kayıtlı, en "
+                f"ilerisi {format_date(latest, 'tr')}. Trendler en son kayda "
+                f"göre hesaplandığı için ileri tarih sonucu bozuyor."
+            ),
+        ))
 
 
 def _check_weight_and_food(pet: Pet, data: dict, out: List[Insight]) -> None:
@@ -123,21 +209,22 @@ def _check_weight_and_food(pet: Pet, data: dict, out: List[Insight]) -> None:
             linked = change_record.recorded_on >= window_start
 
     if linked and change_record:
-        when = change_record.recorded_on.strftime("%d %B %Y")
         out.append(Insight(
             level="warning",
             title_en="Weight gain follows a change of food",
             title_tr="Kilo artışı mama değişikliğiyle örtüşüyor",
             detail_en=(
                 f"Weight is up {change:+.1f} kg over the last {weeks} weeks. "
-                f"The food changed to {change_record.food_brand} on {when}, "
-                f"which is inside that window. Worth reviewing the portion."
+                f"The food changed to {change_record.food_brand} on "
+                f"{format_date(change_record.recorded_on, 'en')}, which is "
+                f"inside that window. Worth reviewing the portion."
             ),
             detail_tr=(
-                f"Son {weeks} haftada kilo {change:+.1f} kg değişti. "
-                f"Mama {when} tarihinde {change_record.food_brand} olarak "
-                f"değişmiş ve bu tarih söz konusu aralığın içinde. "
-                f"Porsiyonun gözden geçirilmesi yerinde olur."
+                f"Son {weeks} haftada kilo {change:+.1f} kg arttı. Mama "
+                f"{format_date(change_record.recorded_on, 'tr')} tarihinde "
+                f"{change_record.food_brand} olarak değişmiş ve bu tarih söz "
+                f"konusu aralığın içinde. Porsiyonun gözden geçirilmesi "
+                f"yerinde olur."
             ),
         ))
     else:
@@ -154,6 +241,59 @@ def _check_weight_and_food(pet: Pet, data: dict, out: List[Insight]) -> None:
                 f"Son {weeks} haftada kilo {change:+.1f} kg arttı. "
                 f"Bu dönemde mama değişikliği kaydı yok; porsiyon, ödül maması "
                 f"veya hareket düzeyine bakmak gerekir."
+            ),
+        ))
+
+
+def _check_weight_loss(pet: Pet, data: dict, out: List[Insight]) -> None:
+    """Falling weight.
+
+    Deliberately not the mirror image of the gain rule. Unexplained loss is a
+    common early sign of several serious conditions, so it is reported at a
+    lower bar and pointed at a vet rather than at the food bowl.
+    """
+    change = data["weight_change_kg"]
+    current = data["current_weight_kg"]
+    if change is None or change >= -LOSS_THRESHOLD_KG:
+        return
+
+    weeks = data["weight_change_weeks"]
+    lost = abs(change)
+    share = lost / (current + lost) if current else 0
+
+    if share >= RAPID_LOSS_FRACTION:
+        out.append(Insight(
+            level="warning",
+            title_en="Rapid weight loss",
+            title_tr="Hızlı kilo kaybı",
+            detail_en=(
+                f"Weight is down {lost:.1f} kg over the last {weeks} weeks, "
+                f"about {share * 100:.0f}% of body weight. Unless this is a "
+                f"planned, supervised reduction, loss at this rate should be "
+                f"assessed by a vet — it is an early sign of several "
+                f"conditions."
+            ),
+            detail_tr=(
+                f"Son {weeks} haftada kilo {lost:.1f} kg azaldı, bu vücut "
+                f"ağırlığının yaklaşık %{share * 100:.0f}'i. Planlı ve takipli "
+                f"bir zayıflama değilse bu hızdaki kayıp veteriner tarafından "
+                f"değerlendirilmeli — birçok hastalığın erken belirtisi."
+            ),
+        ))
+    else:
+        out.append(Insight(
+            level="suggestion",
+            title_en="Weight is falling",
+            title_tr="Kilo düşüyor",
+            detail_en=(
+                f"Weight is down {lost:.1f} kg over the last {weeks} weeks. If "
+                f"this is intentional, keep weighing weekly. If not, check "
+                f"appetite and portion first."
+            ),
+            detail_tr=(
+                f"Son {weeks} haftada kilo {lost:.1f} kg azaldı. Bilinçli bir "
+                f"zayıflamaysa haftalık tartıma devam edin. Değilse önce iştah "
+                f"ve porsiyonu kontrol edin."
             ),
         ))
 
@@ -222,9 +362,10 @@ def _check_target(data: dict, out: List[Insight]) -> None:
                 f"alongside a portion review is a reasonable starting point."
             ),
             detail_tr=(
-                f"{data['target_weight_kg']:.1f} kg hedefin {over_kg:+.1f} kg "
-                f"üzerinde (%{over_pct:+.1f}). Porsiyon gözden geçirmesine ek "
-                f"olarak günde 30 dakika yürüyüş makul bir başlangıç."
+                f"{data['target_weight_kg']:.1f} kg hedefin {over_kg:.1f} kg "
+                f"üzerinde, yani hedefin %{abs(over_pct):.1f} üstünde. Porsiyon "
+                f"gözden geçirmesine ek olarak günde 30 dakika yürüyüş makul "
+                f"bir başlangıç."
             ),
         ))
     elif abs(over_pct) <= OVERWEIGHT_FRACTION * 100:
@@ -239,6 +380,25 @@ def _check_target(data: dict, out: List[Insight]) -> None:
             detail_tr=(
                 f"{data['target_weight_kg']:.1f} kg hedefin "
                 f"%{OVERWEIGHT_FRACTION * 100:.0f} bandı içinde."
+            ),
+        ))
+    else:
+        out.append(Insight(
+            level="warning",
+            title_en="Below target weight",
+            title_tr="Hedef kilonun altında",
+            detail_en=(
+                f"{abs(over_kg):.1f} kg below the "
+                f"{data['target_weight_kg']:.1f} kg target "
+                f"({abs(over_pct):.1f}% under). Being under target matters as "
+                f"much as being over it; if it was not planned, have it "
+                f"looked at."
+            ),
+            detail_tr=(
+                f"{data['target_weight_kg']:.1f} kg hedefin "
+                f"{abs(over_kg):.1f} kg altında, yani hedefin "
+                f"%{abs(over_pct):.1f} altında. Hedefin altında olmak da en az "
+                f"üstünde olmak kadar önemli; planlı değilse kontrol ettirin."
             ),
         ))
 
@@ -259,8 +419,8 @@ def _check_stool(data: dict, out: List[Insight]) -> None:
                 f"days are normal."
             ),
             detail_tr=(
-                f"Son {STOOL_WINDOW_DAYS} gündeki dışkı kayıtlarının %{percent}'i "
-                f"normal."
+                f"Son {STOOL_WINDOW_DAYS} gündeki dışkı kayıtlarında normal "
+                f"oranı %{percent}."
             ),
         ))
     elif percent < 60:
@@ -274,9 +434,10 @@ def _check_stool(data: dict, out: List[Insight]) -> None:
                 f"with a vet, especially if it lasts beyond 48 hours."
             ),
             detail_tr=(
-                f"Son {STOOL_WINDOW_DAYS} gündeki kayıtların yalnızca %{percent}'i "
-                f"normal. Süreklilik gösteren yumuşak veya sulu dışkı, özellikle "
-                f"48 saati aşıyorsa veterinere danışmayı gerektirir."
+                f"Son {STOOL_WINDOW_DAYS} gündeki kayıtlarda normal oranı "
+                f"yalnızca %{percent}. Süreklilik gösteren yumuşak veya sulu "
+                f"dışkı, özellikle 48 saati aşıyorsa veterinere danışmayı "
+                f"gerektirir."
             ),
         ))
 

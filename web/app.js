@@ -214,6 +214,9 @@ async function loadRecords() {
 function setToday(root = document) {
   const today = new Date().toISOString().slice(0, 10);
   $$('input[type="date"][name="recorded_on"]', root).forEach((input) => {
+    // The API rejects future dates; stop them at the picker so the user gets
+    // a constraint rather than an error.
+    input.max = today;
     if (!input.value) input.value = today;
   });
 }

@@ -11,6 +11,9 @@ __pycache__/
 pawprint.db
 .env
 
+# Generated output
+reports/
+
 # Editors
 .idea/
 .vscode/
