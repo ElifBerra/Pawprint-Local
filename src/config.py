@@ -57,7 +57,32 @@ TOP_P = 0.9
 # degrade phi-3.5-mini's output (see docs/EVALUATION.md), so they stay off.
 SAMPLING_TOP_K = 40
 
-FALLBACK_ANSWER = "I don't have that information in my documents."
+# --- Language ------------------------------------------------------------
+# The document collection is English. The interface and the answers can be
+# either. Turkish answer quality is measured in docs/EVALUATION.md.
+DEFAULT_LANGUAGE = "en"
+LANGUAGES = ("en", "tr")
+
+FALLBACK_ANSWERS = {
+    "en": "I don't have that information in my documents.",
+    "tr": "Bu bilgi belgelerimde yok.",
+}
+
+# Kept for the existing callers and tests.
+FALLBACK_ANSWER = FALLBACK_ANSWERS["en"]
+
+LANGUAGE_INSTRUCTION = {
+    "en": "Write the answer in English.",
+    "tr": (
+        "Cevabı Türkçe yaz. Kaynak belgeler İngilizce; bilgiyi Türkçeye çevirerek "
+        "aktar, İngilizce cümle bırakma."
+    ),
+}
+
+
+def fallback(lang: str = DEFAULT_LANGUAGE) -> str:
+    return FALLBACK_ANSWERS.get(lang, FALLBACK_ANSWERS["en"])
+
 
 SYSTEM_PROMPT = """You are Pawprint, a pet health assistant.
 
@@ -72,6 +97,32 @@ Rules:
   "{fallback}"
   Say nothing else in that case. Never combine that sentence with an answer.
 - Do not diagnose. For urgent or worsening problems, say to contact a vet.
+- {language}
 
 Context:
 {context}"""
+
+# Used when the question is about an animal we hold records for. The two
+# sources are labelled and kept apart so the model does not attribute a
+# general guideline to this specific animal, or the reverse.
+SYSTEM_PROMPT_WITH_PET = """You are Pawprint, a pet health assistant.
+
+You have two sources. Use both. Do not add anything from outside them.
+
+RECORDS — measured facts about this specific animal:
+{pet_context}
+
+REFERENCE — general guidance from the document collection:
+{context}
+
+Rules:
+- Answer directly in at most five sentences.
+- When RECORDS are relevant, quote the actual numbers rather than generalising.
+- From REFERENCE use only sentences that directly answer the question; ignore
+  unrelated material and never join a fact from one topic onto another.
+- Do not state anything as measured unless it appears in RECORDS.
+- If neither source answers the question, reply with exactly:
+  "{fallback}"
+  Say nothing else in that case.
+- Do not diagnose. For urgent or worsening problems, say to contact a vet.
+- {language}"""

@@ -1,4 +1,14 @@
-"""The RAG pipeline: retrieve, augment, generate."""
+"""The RAG pipeline: retrieve, augment, generate.
+
+Two shapes of answer:
+
+  answer(question)              general questions against the document collection
+  answer(question, pet=pet)     the same, plus the animal's own records
+
+The second is what makes the assistant useful rather than merely correct. The
+documents can say what a portion should be; only the records know what this
+animal is actually being fed.
+"""
 
 from __future__ import annotations
 
@@ -6,8 +16,8 @@ import logging
 import time
 from typing import Generator, List, Optional, Sequence
 
-from . import config, llm, retrieve
-from .models import Answer, Chunk, Retrieved
+from . import config, llm, pet_context, retrieve
+from .models import Answer, Chunk, Pet, Retrieved
 
 logger = logging.getLogger(__name__)
 
@@ -33,79 +43,50 @@ def _prepare(
     chunks: Optional[Sequence[Chunk]],
     k: Optional[int] = None,
     threshold: Optional[float] = None,
+    pet: Optional[Pet] = None,
+    lang: str = config.DEFAULT_LANGUAGE,
 ):
     """Shared front half of both answer paths: retrieve and build the prompt.
 
-    Returns (results, system_prompt). system_prompt is None when the question
-    is out of scope and the model should not be called at all.
+    Returns (results, system_prompt, used_pet). system_prompt is None when the
+    question is out of scope and the model should not be called at all.
     """
     results = retrieve.get_top_chunks(
         question, k=config.TOP_K if k is None else k, chunks=chunks
     )
 
-    if not retrieve.is_relevant(results, threshold=threshold):
+    use_pet = pet is not None and pet_context.has_useful_records(pet)
+
+    # With records on file the bar is lower: "is Bella too heavy?" may match no
+    # document strongly, yet the records answer it. Without records, a weak
+    # match means we have nothing to say.
+    relevant = retrieve.is_relevant(results, threshold=threshold)
+    if not relevant and not use_pet:
         logger.info(
             "Below threshold (best=%.3f), returning fallback",
             results[0].score if results else 0.0,
         )
-        return results, None
+        return results, None, False
+
+    language = config.LANGUAGE_INSTRUCTION.get(
+        lang, config.LANGUAGE_INSTRUCTION["en"]
+    )
+
+    if use_pet:
+        prompt = config.SYSTEM_PROMPT_WITH_PET.format(
+            pet_context=pet_context.build(pet, lang),
+            context=build_context(results) if relevant else "(no relevant passages)",
+            fallback=config.fallback(lang),
+            language=language,
+        )
+        return results if relevant else [], prompt, True
 
     prompt = config.SYSTEM_PROMPT.format(
-        fallback=config.FALLBACK_ANSWER,
+        fallback=config.fallback(lang),
         context=build_context(results),
+        language=language,
     )
-    return results, prompt
-
-
-def answer_stream(
-    question: str,
-    chunks: Optional[Sequence[Chunk]] = None,
-    k: Optional[int] = None,
-    threshold: Optional[float] = None,
-) -> Generator[str, None, Answer]:
-    """Same as answer(), but yields the text as it is generated.
-
-    Total time is unchanged; what changes is that the first words appear in a
-    couple of seconds instead of the reader watching a blank screen. Consume
-    with a for loop and read the final Answer from StopIteration.value, or use
-    the helper in cli.py.
-    """
-    started = time.perf_counter()
-
-    if not question or not question.strip():
-        yield "Please ask a question."
-        return Answer(
-            text="Please ask a question.",
-            latency_s=time.perf_counter() - started,
-            used_fallback=True,
-        )
-
-    results, system_prompt = _prepare(question, chunks, k, threshold)
-
-    if system_prompt is None:
-        yield config.FALLBACK_ANSWER
-        return Answer(
-            text=config.FALLBACK_ANSWER,
-            retrieved=results,
-            latency_s=time.perf_counter() - started,
-            used_fallback=True,
-        )
-
-    pieces: List[str] = []
-    for piece in llm.generate_streaming(system_prompt, question):
-        pieces.append(piece)
-        yield piece
-
-    text = "".join(pieces).strip()
-    used_fallback = _is_fallback(text)
-
-    return Answer(
-        text=text,
-        sources=[] if used_fallback else unique_sources(results),
-        retrieved=results,
-        latency_s=time.perf_counter() - started,
-        used_fallback=used_fallback,
-    )
+    return results, prompt, False
 
 
 def _is_fallback(text: str) -> bool:
@@ -128,13 +109,14 @@ def _is_fallback(text: str) -> bool:
     by a smuggled answer runs much longer.
     """
     stripped = text.strip().strip('"').strip().lower()
-    fallback = config.FALLBACK_ANSWER.lower()
-
     if not stripped:
         return True
-    if fallback not in stripped:
-        return False
-    return len(stripped) <= len(fallback) * 4
+
+    for phrase in config.FALLBACK_ANSWERS.values():
+        lowered = phrase.lower()
+        if lowered in stripped and len(stripped) <= len(lowered) * 4:
+            return True
+    return False
 
 
 def answer(
@@ -142,31 +124,35 @@ def answer(
     chunks: Optional[Sequence[Chunk]] = None,
     k: Optional[int] = None,
     threshold: Optional[float] = None,
+    pet: Optional[Pet] = None,
+    lang: str = config.DEFAULT_LANGUAGE,
 ) -> Answer:
-    """Answer a question from the local document collection.
+    """Answer a question from the documents, and the animal's records if given.
 
     Args:
         question: The user's question.
-        chunks: Optional pre-loaded chunks, passed straight through to
-            retrieval. Used by the tests.
+        chunks: Optional pre-loaded chunks, passed to retrieval. Used by tests.
         k: Override for config.TOP_K.
         threshold: Override for config.SIM_THRESHOLD.
+        pet: When given and records exist, the animal's data joins the prompt.
+        lang: "en" or "tr" — the language of the answer.
     """
     started = time.perf_counter()
 
     if not question or not question.strip():
         return Answer(
-            text="Please ask a question.",
+            text="Please ask a question." if lang == "en" else "Lütfen bir soru yazın.",
             latency_s=time.perf_counter() - started,
             used_fallback=True,
         )
 
-    results, system_prompt = _prepare(question, chunks, k, threshold)
+    results, system_prompt, used_pet = _prepare(
+        question, chunks, k, threshold, pet, lang
+    )
 
-    # Nothing close enough — don't call the model at all.
     if system_prompt is None:
         return Answer(
-            text=config.FALLBACK_ANSWER,
+            text=config.fallback(lang),
             retrieved=results,
             latency_s=time.perf_counter() - started,
             used_fallback=True,
@@ -181,4 +167,61 @@ def answer(
         retrieved=results,
         latency_s=time.perf_counter() - started,
         used_fallback=used_fallback,
+        used_pet_record=used_pet and not used_fallback,
+    )
+
+
+def answer_stream(
+    question: str,
+    chunks: Optional[Sequence[Chunk]] = None,
+    k: Optional[int] = None,
+    threshold: Optional[float] = None,
+    pet: Optional[Pet] = None,
+    lang: str = config.DEFAULT_LANGUAGE,
+) -> Generator[str, None, Answer]:
+    """Same as answer(), but yields the text as it is generated.
+
+    Total time is unchanged; what changes is that the first words appear in a
+    couple of seconds instead of the reader watching a blank screen. Consume
+    with a for loop and read the final Answer from StopIteration.value.
+    """
+    started = time.perf_counter()
+
+    if not question or not question.strip():
+        message = "Please ask a question." if lang == "en" else "Lütfen bir soru yazın."
+        yield message
+        return Answer(
+            text=message,
+            latency_s=time.perf_counter() - started,
+            used_fallback=True,
+        )
+
+    results, system_prompt, used_pet = _prepare(
+        question, chunks, k, threshold, pet, lang
+    )
+
+    if system_prompt is None:
+        yield config.fallback(lang)
+        return Answer(
+            text=config.fallback(lang),
+            retrieved=results,
+            latency_s=time.perf_counter() - started,
+            used_fallback=True,
+        )
+
+    pieces: List[str] = []
+    for piece in llm.generate_streaming(system_prompt, question):
+        pieces.append(piece)
+        yield piece
+
+    text = "".join(pieces).strip()
+    used_fallback = _is_fallback(text)
+
+    return Answer(
+        text=text,
+        sources=[] if used_fallback else unique_sources(results),
+        retrieved=results,
+        latency_s=time.perf_counter() - started,
+        used_fallback=used_fallback,
+        used_pet_record=used_pet and not used_fallback,
     )
