@@ -308,6 +308,75 @@ Zor negatifler artık modele hiç gitmiyor: 14.9s → 0.6s. Ortalama gecikmedeki
 
 ---
 
+## Türkçe desteği — ölçüm ve karar
+
+Arayüzün Türkçe olması istendi. Belge koleksiyonu İngilizce. İki ayrı soru
+vardı ve ayrı ayrı ölçüldü: **Türkçe soru İngilizce belgeyi bulabiliyor mu**, ve
+**model Türkçe cevap yazabiliyor mu**. Sonuç: birincisi evet, ikincisi hayır.
+
+### Çapraz dilli retrieval — çalışıyor, ama kalibrasyon gerekiyor
+
+`scripts/probe_crosslingual.py`, sekiz soruyu hem Türkçe hem İngilizce sorup
+skorları karşılaştırıyor.
+
+| | Kapsam içi en düşük | Kapsam içi ortalama | Kapsam dışı en yüksek | Karar payı |
+|---|---|---|---|---|
+| İngilizce | 0.504 | 0.658 | 0.419 | +0.085 |
+| Türkçe | 0.293 | 0.343 | 0.250 | +0.042 |
+
+Doğru belge bulunma oranı: **Türkçe 7/8, İngilizce 8/8.** Yani `qwen3-embedding-0.6b`
+Türkçe soruyu İngilizce pasajla eşleştirebiliyor. Ama aynı anlamdaki soru
+Türkçe sorulduğunda skor sistematik olarak **~0.30 düşük** çıkıyor.
+
+Bunun pratik sonucu ağırdı: tek eşik (0.48) kullanılırken Türkçe kapsam içi
+soruların **8/8'i** modele hiç ulaşmadan reddediliyordu. Sorun anlama değil,
+kalibrasyondu.
+
+Çözüm dile göre eşik: `SIM_THRESHOLDS = {"en": 0.48, "tr": 0.27}`.
+
+Dürüst not: Türkçe karar payı (+0.042) İngilizcenin (+0.085) yarısı kadar.
+Yani Türkçede kapsam dışı tespiti ölçülebilir biçimde daha kırılgan.
+
+### Üretim — dört model denendi, hiçbiri geçmedi
+
+Kabul kriteri baştan konuldu: 5 soruda 0 hata, medyan < 25s, okunabilir Türkçe
+ve pire sorusunda permethrin uyarısının net verilmesi.
+
+| Model | Hata | Medyan | Gözlem |
+|---|---|---|---|
+| `phi-3.5-mini` | 3/5 | 65s | Bozuk dilbilgisi: *"Bella'nin aktual yedi bardak Acme Premium yiyen yedi gün boyunca..."* |
+| `qwen3-1.7b` | 1/5 | 44s | `<think>` bloğunda İngilizce düşünüyor, token bütçesi bitiyor, cevap hiç gelmiyor |
+| `qwen3-4b` | 3/5 | 59s | Aynı davranış, daha yavaş |
+| `qwen2.5-1.5b` | 3/5 | 76s | Uydurma kelimeler: *"cıkçatalar biraz azetli ve çok zengin"* |
+
+Ara bulgu: İngilizce prompt'a "cevabı Türkçe yaz" talimatı eklemek, prompt'un
+tamamını Türkçe yazmaktan belirgin daha kötü. Model okuduğu dil ile yazması
+istenen dil arasında savruluyor. Bu yüzden `SYSTEM_PROMPT_TR` çeviri değil,
+Türkçe yazılmış ayrı bir şablon. Yine de tek başına yetmedi.
+
+Qwen3'ün düşünme modu `/no_think` ile kapatılmaya çalışıldı (hem sistem hem
+kullanıcı mesajında). Foundry Local'ın ONNX derlemesi bu yumuşak anahtarı
+tanımıyor.
+
+Tekrarlayan `Operation was cancelled` hatası da rastgele değil: Türkçe üretim
+uzadıkça ortaya çıkıyor. Türkçe bu modellerin kelime dağarcığında çok daha
+fazla token'a bölünüyor.
+
+### Karar
+
+**Arayüz Türkçe, cevaplar İngilizce.** `EXPERIMENTAL_TURKISH_ANSWERS = False`.
+
+Türkçe promptlar ve dile göre eşik kod tabanında kalıyor — çalışıyorlar, ölçüm
+onlara karşı yapıldı, ve daha güçlü bir yerel model çıktığında bu tek satırlık
+bir değişiklik olur.
+
+Bu bir eksiklik değil, ölçülmüş bir sınır. Retrieval katmanının çok dilli
+çalıştığı, üretim katmanının çalışmadığı ayrı ayrı gösterildi. Çalışmayan bir
+Türkçe modunu arayüze koymak, kullanıcıya *"cıkçatalar biraz azetli"* gibi bir
+sağlık tavsiyesi göstermek olurdu.
+
+---
+
 ## Denenmedi
 
 **Daha küçük sohbet modeli.** `qwen2.5-1.5b-instruct` (3.8B yerine 1.5B) CPU'da
