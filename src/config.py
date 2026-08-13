@@ -6,6 +6,13 @@ one file.
 
 from pathlib import Path
 
+# --- Language ------------------------------------------------------------
+# Declared first: several settings below are per-language.
+# The document collection is English. The interface and the answers can be
+# either. Turkish behaviour is measured in docs/EVALUATION.md.
+DEFAULT_LANGUAGE = "en"
+LANGUAGES = ("en", "tr")
+
 # --- Paths ---------------------------------------------------------------
 ROOT_DIR = Path(__file__).resolve().parent.parent
 DOCS_DIR = ROOT_DIR / "data" / "docs"
@@ -44,6 +51,32 @@ TOP_K = 3
 # declined correctly but only by its own judgement — and cost 15 seconds each.
 SIM_THRESHOLD = 0.48
 
+# The threshold has to be per-language, because the documents are English and
+# a Turkish question is compared across languages.
+#
+# Measured with scripts/probe_crosslingual.py on eight paired questions. The
+# same question scores about 0.30 lower asked in Turkish:
+#
+#            in-scope lowest   in-scope mean   out-of-scope highest   margin
+#   English            0.504           0.658                  0.419   +0.085
+#   Turkish            0.293           0.343                  0.250   +0.042
+#
+# Retrieval itself holds up — the correct document was found for 7 of 8 Turkish
+# questions against 8 of 8 in English. What fails is the calibration: at 0.48
+# every Turkish in-scope question was refused before the model was called.
+#
+# 0.27 sits in the Turkish gap. Note it is a narrower gap: out-of-scope
+# detection is measurably less reliable in Turkish, and that limitation is
+# stated in the interface rather than hidden.
+SIM_THRESHOLDS = {
+    "en": 0.48,
+    "tr": 0.27,
+}
+
+
+def threshold(lang: str = DEFAULT_LANGUAGE) -> float:
+    return SIM_THRESHOLDS.get(lang, SIM_THRESHOLD)
+
 # --- Generation ----------------------------------------------------------
 # Answers are short by design. 512 tokens gave the model room to drift into
 # repetition loops on CPU, and every extra token costs real seconds here.
@@ -57,12 +90,6 @@ TOP_P = 0.9
 # degrade phi-3.5-mini's output (see docs/EVALUATION.md), so they stay off.
 SAMPLING_TOP_K = 40
 
-# --- Language ------------------------------------------------------------
-# The document collection is English. The interface and the answers can be
-# either. Turkish answer quality is measured in docs/EVALUATION.md.
-DEFAULT_LANGUAGE = "en"
-LANGUAGES = ("en", "tr")
-
 FALLBACK_ANSWERS = {
     "en": "I don't have that information in my documents.",
     "tr": "Bu bilgi belgelerimde yok.",
@@ -73,15 +100,41 @@ FALLBACK_ANSWER = FALLBACK_ANSWERS["en"]
 
 LANGUAGE_INSTRUCTION = {
     "en": "Write the answer in English.",
-    "tr": (
-        "Cevabı Türkçe yaz. Kaynak belgeler İngilizce; bilgiyi Türkçeye çevirerek "
-        "aktar, İngilizce cümle bırakma."
-    ),
+    "tr": "Cevabı Türkçe yaz.",
 }
 
 
 def fallback(lang: str = DEFAULT_LANGUAGE) -> str:
     return FALLBACK_ANSWERS.get(lang, FALLBACK_ANSWERS["en"])
+
+
+# Turkish answers are off by default. The interface translates; the model does
+# not. This is measured, not assumed — four local models were tried on the same
+# five Turkish questions (docs/EVALUATION.md):
+#
+#   model            failures   median   quality
+#   phi-3.5-mini          3/5      65s   broken grammar
+#   qwen3-1.7b            1/5      44s   reasons in English, never answers
+#   qwen3-4b              3/5      59s   reasons in English, never answers
+#   qwen2.5-1.5b          3/5      76s   invented words ("cıkçatalar", "azetli")
+#
+# Retrieval is not the problem: cross-language search finds the right document
+# for 7 of 8 Turkish questions once the threshold is set per language. What
+# fails is generation. Turkish splits into far more tokens in these vocabularies,
+# so every answer is slower, further out of distribution, and long generations
+# hit "Operation was cancelled".
+#
+# The Turkish prompts and the per-language threshold stay in the codebase: they
+# work, they are what the measurement was run against, and a stronger local
+# model would make this a one-line change.
+EXPERIMENTAL_TURKISH_ANSWERS = False
+
+
+def answer_language(ui_language: str = DEFAULT_LANGUAGE) -> str:
+    """Which language the model should answer in, given the interface language."""
+    if ui_language == "tr" and not EXPERIMENTAL_TURKISH_ANSWERS:
+        return "en"
+    return ui_language
 
 
 SYSTEM_PROMPT = """You are Pawprint, a pet health assistant.
@@ -126,3 +179,66 @@ Rules:
   Say nothing else in that case.
 - Do not diagnose. For urgent or worsening problems, say to contact a vet.
 - {language}"""
+
+
+# Turkish prompts are written in Turkish rather than translated at answer time.
+#
+# Measured, not assumed. Bolting "write the answer in Turkish" onto an English
+# prompt produced broken output ("Bella'nin aktual yedi bardak Acme Premium
+# yiyen yedi gün boyunca normal olduğunu belirtmek..."), while an all-Turkish
+# prompt produced clean sentences from the same model. The model appears to
+# drift between the language it is reading and the one it is told to write.
+# See docs/EVALUATION.md.
+#
+# The retrieved passages stay English — that is what the collection is in, and
+# cross-language retrieval is measured separately.
+
+SYSTEM_PROMPT_TR = """Sen Pawprint adlı bir evcil hayvan sağlığı asistanısın.
+
+Soruyu YALNIZCA aşağıdaki bağlamı kullanarak cevapla. Kendi bilgini ekleme.
+Bağlam İngilizce; sen Türkçe cevap ver.
+
+Kurallar:
+- Doğrudan cevap ver, en fazla dört cümle. Soru cevaplanınca dur.
+- Bağlamda yalnızca soruyu doğrudan cevaplayan cümleleri kullan. Bağlamda
+  ilgisiz bilgi olabilir, onu yok say. Bir konudaki bilgiyi başka bir konudaki
+  cevaba ekleme.
+- Eğer, ve yalnızca eğer, bağlamda ilgili hiçbir bilgi yoksa tam olarak şunu yaz:
+  "{fallback}"
+  O durumda başka hiçbir şey yazma. Bu cümleyi bir cevapla birleştirme.
+- Teşhis koyma. Acil veya kötüleşen durumlarda veterinere başvurulmasını söyle.
+- Tamamı Türkçe olsun, İngilizce cümle bırakma.
+
+Bağlam:
+{context}"""
+
+SYSTEM_PROMPT_WITH_PET_TR = """Sen Pawprint adlı bir evcil hayvan sağlığı asistanısın.
+
+İki kaynağın var. İkisini de kullan, dışına çıkma.
+Kaynaklar İngilizce; sen Türkçe cevap ver.
+
+KAYITLAR — bu hayvana ait ölçülmüş bilgiler:
+{pet_context}
+
+REFERANS — belge koleksiyonundan genel bilgi:
+{context}
+
+Kurallar:
+- Doğrudan cevap ver, en fazla beş cümle.
+- KAYITLAR konuyla ilgiliyse genelleme yapma, gerçek sayıları kullan.
+- REFERANS'tan yalnızca soruyu doğrudan cevaplayan cümleleri al; ilgisiz bilgiyi
+  yok say ve bir konudaki bilgiyi başka bir cevaba ekleme.
+- KAYITLAR'da geçmeyen hiçbir şeyi ölçülmüş gibi belirtme.
+- İki kaynak da soruyu cevaplamıyorsa tam olarak şunu yaz:
+  "{fallback}"
+  O durumda başka hiçbir şey yazma.
+- Teşhis koyma. Acil veya kötüleşen durumlarda veterinere başvurulmasını söyle.
+- Tamamı Türkçe olsun, İngilizce cümle bırakma.
+- Birimler: kilogram için "kg", porsiyon için "bardak" kullan."""
+
+
+def system_prompt(lang: str = DEFAULT_LANGUAGE, with_pet: bool = False) -> str:
+    """The prompt template for a language, written natively in that language."""
+    if lang == "tr":
+        return SYSTEM_PROMPT_WITH_PET_TR if with_pet else SYSTEM_PROMPT_TR
+    return SYSTEM_PROMPT_WITH_PET if with_pet else SYSTEM_PROMPT

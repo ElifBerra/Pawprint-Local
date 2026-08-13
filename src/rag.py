@@ -57,10 +57,15 @@ def _prepare(
 
     use_pet = pet is not None and pet_context.has_useful_records(pet)
 
+    # The threshold is per-language: the documents are English, so a Turkish
+    # question is matched across languages and scores about 0.30 lower for the
+    # same meaning. See config.SIM_THRESHOLDS.
+    limit = config.threshold(lang) if threshold is None else threshold
+
     # With records on file the bar is lower: "is Bella too heavy?" may match no
     # document strongly, yet the records answer it. Without records, a weak
     # match means we have nothing to say.
-    relevant = retrieve.is_relevant(results, threshold=threshold)
+    relevant = retrieve.is_relevant(results, threshold=limit)
     if not relevant and not use_pet:
         logger.info(
             "Below threshold (best=%.3f), returning fallback",
@@ -71,17 +76,18 @@ def _prepare(
     language = config.LANGUAGE_INSTRUCTION.get(
         lang, config.LANGUAGE_INSTRUCTION["en"]
     )
+    no_passages = "(ilgili pasaj yok)" if lang == "tr" else "(no relevant passages)"
 
     if use_pet:
-        prompt = config.SYSTEM_PROMPT_WITH_PET.format(
+        prompt = config.system_prompt(lang, with_pet=True).format(
             pet_context=pet_context.build(pet, lang),
-            context=build_context(results) if relevant else "(no relevant passages)",
+            context=build_context(results) if relevant else no_passages,
             fallback=config.fallback(lang),
             language=language,
         )
         return results if relevant else [], prompt, True
 
-    prompt = config.SYSTEM_PROMPT.format(
+    prompt = config.system_prompt(lang, with_pet=False).format(
         fallback=config.fallback(lang),
         context=build_context(results),
         language=language,
