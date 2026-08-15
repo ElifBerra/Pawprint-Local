@@ -255,7 +255,14 @@
         </form>
 
         <div class="card" id="nutrition-card">
-          <h2 class="card-title"><span>🥗</span><span data-i18n="nut.title">Beslenme Analizi</span></h2>
+          <div class="card-head">
+            <h2 class="card-title"><span>🥗</span><span data-i18n="nut.title">Beslenme Analizi</span></h2>
+            <div class="segmented" id="period-switch">
+              <button class="seg is-active" data-period="day" data-i18n="nut.daily">Günlük</button>
+              <button class="seg" data-period="week" data-i18n="nut.weekly">Haftalık</button>
+              <button class="seg" data-period="month" data-i18n="nut.monthly">Aylık</button>
+            </div>
+          </div>
           <div id="nutrition-body"></div>
         </div>
 

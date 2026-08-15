@@ -413,16 +413,45 @@ def delete_food(food_id: int) -> dict:
 
 # --- Nutrition -----------------------------------------------------------
 
+PERIOD_DAYS = {"day": 1, "week": 7, "month": 30}
+
+
 @app.get("/api/nutrition")
-def get_nutrition() -> dict:
-    """Energy and macros: what is being fed against what is needed."""
+def get_nutrition(period: str = "day") -> dict:
+    """Energy and macros: what is being fed against what is needed.
+
+    period=day   the current feeding record
+    period=week  average over the last 7 days
+    period=month average over the last 30 days
+    """
     pet = _pet_or_404()
+
+    if period in ("week", "month"):
+        result = nutrition.analyse_period(pet, PERIOD_DAYS[period])
+        if result is None:
+            return {"available": False, "reason": "no_weight", "period": period}
+        if not result.get("covered_days"):
+            return {"available": False, "reason": "no_food", "period": period,
+                    "energy": result["energy"]}
+        return {"available": True, "period": period, **result}
+
     analysis = nutrition.analyse(pet)
     if analysis is None:
-        return {"available": False, "reason": "no_weight"}
+        return {"available": False, "reason": "no_weight", "period": "day"}
     if analysis.get("food") is None:
-        return {"available": False, "reason": "no_food", "energy": analysis["energy"]}
-    return {"available": True, **analysis}
+        return {"available": False, "reason": "no_food", "period": "day",
+                "energy": analysis["energy"]}
+    return {"available": True, "period": "day", **analysis}
+
+
+@app.get("/api/nutrition/record/{record_id}")
+def get_record_nutrition(record_id: int) -> dict:
+    """One feeding record on its own, including the per-meal breakdown."""
+    pet = _pet_or_404()
+    result = nutrition.analyse_record(pet, record_id)
+    if result is None:
+        raise HTTPException(404, "No such record, or its food is not in the catalogue.")
+    return result
 
 
 @app.get("/api/nutrition/compare")

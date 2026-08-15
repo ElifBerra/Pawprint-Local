@@ -226,6 +226,39 @@ body {
 .delta-under { color: var(--accent); }
 .delta-ok    { color: var(--success); }
 
+.segmented {
+  display: flex; gap: 3px; padding: 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-s);
+}
+.seg {
+  padding: 5px 13px; border: 0; border-radius: 6px;
+  background: none; color: var(--text-faint);
+  font: inherit; font-size: 12px; font-weight: 550;
+  cursor: pointer; white-space: nowrap;
+  transition: background .13s, color .13s;
+}
+.seg:hover { color: var(--text); }
+.seg.is-active { background: var(--surface-3); color: var(--text); }
+
+.record-row.is-clickable { cursor: pointer; transition: background .13s; }
+.record-row.is-clickable:hover { background: var(--surface-3); }
+.record-row.is-open { background: var(--accent-soft); }
+
+.record-detail {
+  margin: 4px 0 10px;
+  padding: 15px 17px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+}
+
+.spark { display: flex; align-items: flex-end; gap: 2px; height: 54px; margin: 4px 0 14px; }
+.spark-bar { flex: 1; border-radius: 2px 2px 0 0; background: var(--accent); opacity: .8; min-height: 2px; }
+.spark-bar.over  { background: var(--warning); }
+.spark-bar.empty { background: var(--surface-3); }
+
 .sample-flag {
   display: inline-block; margin-left: 7px;
   padding: 1px 7px; border-radius: 4px;
