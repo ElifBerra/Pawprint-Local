@@ -21,8 +21,10 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
-from . import config, db, foundry, insights, pets_db, rag, report
-from .models import FeedingRecord, Pet, StoolRecord, WeightRecord
+from . import (config, db, foods_db, foundry, insights, nutrition, pets_db,
+               rag, report, vaccines)
+from .models import (FeedingRecord, Food, Pet, StoolRecord, VaccineRecord,
+                     WeightRecord)
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,21 @@ class PetIn(BaseModel):
     sex: Optional[str] = None
     target_weight_kg: Optional[float] = None
     owner_name: Optional[str] = None
+    neutered: Optional[bool] = None
+    id: Optional[int] = None
+
+
+class FoodIn(BaseModel):
+    """The guaranteed analysis panel, as printed on the bag."""
+
+    name: str = Field(min_length=1, max_length=120)
+    species: str = Field(default="both", pattern="^(dog|cat|both)$")
+    kcal_per_100g: float = Field(gt=0, lt=900)
+    protein_pct: float = Field(ge=0, le=100)
+    fat_pct: float = Field(ge=0, le=100)
+    fibre_pct: float = Field(default=0, ge=0, le=100)
+    moisture_pct: float = Field(default=10, ge=0, le=95)
+    ash_pct: float = Field(default=0, ge=0, le=100)
     id: Optional[int] = None
 
 
@@ -67,8 +84,16 @@ class WeightIn(RecordIn):
 
 
 class FeedingIn(RecordIn):
-    food_brand: str
-    portion_cups: float = Field(gt=0, lt=50)
+    """Grams, and either a food already in the catalogue or a new one.
+
+    `new_food` is the "Other" path: the user reads the panel off a bag we have
+    never seen, and it is saved to the catalogue at the same time so they never
+    type it twice.
+    """
+
+    grams: float = Field(gt=0, lt=5000)
+    food_id: Optional[int] = None
+    new_food: Optional[FoodIn] = None
     meals_per_day: Optional[int] = Field(default=None, ge=1, le=10)
     note: Optional[str] = None
 
@@ -76,6 +101,26 @@ class FeedingIn(RecordIn):
 class StoolIn(RecordIn):
     quality: str = Field(pattern="^(normal|soft|loose|hard)$")
     frequency_per_day: Optional[float] = Field(default=None, ge=0, le=20)
+
+
+class VaccineIn(BaseModel):
+    """A dose that was given. Unlike the others this is dated in the past by
+    definition, but next_due_on is allowed to be in the future — that is the
+    date the vet wrote on the card."""
+
+    given_on: date
+    vaccine_key: str = Field(min_length=1, max_length=40)
+    vet_name: Optional[str] = None
+    batch: Optional[str] = None
+    note: Optional[str] = None
+    next_due_on: Optional[date] = None
+
+    @field_validator("given_on")
+    @classmethod
+    def not_in_the_future(cls, value: date) -> date:
+        if value > date.today():
+            raise ValueError("given_on cannot be in the future")
+        return value
 
 
 class AskIn(BaseModel):
@@ -104,7 +149,23 @@ def _pet_dict(pet: Pet, lang: str) -> dict:
         "sex": pet.sex,
         "target_weight_kg": pet.target_weight_kg,
         "owner_name": pet.owner_name,
+        "neutered": pet.neutered,
         "age_text": pet.age_text(lang),
+    }
+
+
+def _food_dict(food: Food) -> dict:
+    return {
+        "id": food.id,
+        "name": food.name,
+        "species": food.species,
+        "kcal_per_100g": food.kcal_per_100g,
+        "protein_pct": food.protein_pct,
+        "fat_pct": food.fat_pct,
+        "fibre_pct": food.fibre_pct,
+        "moisture_pct": food.moisture_pct,
+        "ash_pct": food.ash_pct,
+        "is_sample": food.is_sample,
     }
 
 
@@ -112,6 +173,8 @@ def _pet_dict(pet: Pet, lang: str) -> dict:
 def _startup() -> None:
     db.init_db()
     pets_db.init_db()
+    foods_db.init_db()
+    foods_db.seed_from_json()
     logger.info("API ready")
 
 
@@ -122,10 +185,23 @@ def status(lang: str = config.DEFAULT_LANGUAGE) -> dict:
     """What the interface needs to render before any user action."""
     corpus = db.stats()
     pet = pets_db.first_pet()
+
+    reminder = None
+    if pet is not None:
+        upcoming = vaccines.next_appointment(pet)
+        if upcoming is not None:
+            reminder = {
+                "name": upcoming.name(lang),
+                "due_on": upcoming.due_on.isoformat() if upcoming.due_on else None,
+                "status": upcoming.status,
+                "days_until": upcoming.days_until,
+            }
+
     return {
         "corpus": corpus,
         "has_pet": pet is not None,
         "pet": _pet_dict(pet, lang) if pet else None,
+        "reminder": reminder,
         "languages": list(config.LANGUAGES),
         "answer_language": config.answer_language(lang),
         "turkish_answers_enabled": config.EXPERIMENTAL_TURKISH_ANSWERS,
@@ -167,6 +243,7 @@ def put_pet(body: PetIn, lang: str = config.DEFAULT_LANGUAGE) -> dict:
         sex=body.sex,
         target_weight_kg=body.target_weight_kg,
         owner_name=body.owner_name,
+        neutered=body.neutered,
     )
     return _pet_dict(pets_db.save_pet(pet), lang)
 
@@ -184,9 +261,9 @@ def get_records() -> dict:
         ],
         "feedings": [
             {"id": r.id, "recorded_on": r.recorded_on.isoformat(),
-             "food_brand": r.food_brand, "portion_cups": r.portion_cups,
-             "meals_per_day": r.meals_per_day, "note": r.note,
-             "recommended_cups": insights.portion_guidance(r.food_brand)}
+             "grams": r.grams, "food_id": r.food_id,
+             "food_brand": r.food_brand, "meals_per_day": r.meals_per_day,
+             "note": r.note}
             for r in pets_db.feedings(pet.id)
         ],
         "stools": [
@@ -209,12 +286,154 @@ def post_weight(body: WeightIn) -> dict:
 @app.post("/api/records/feeding")
 def post_feeding(body: FeedingIn) -> dict:
     pet = _pet_or_404()
+
+    food_id = body.food_id
+    created = None
+
+    if body.new_food is not None:
+        existing = foods_db.get_by_name(body.new_food.name)
+        if existing is not None:
+            food_id = existing.id
+        else:
+            created = foods_db.save(Food(**body.new_food.model_dump(
+                exclude={"id"}
+            )))
+            food_id = created.id
+
+    if food_id is None:
+        raise HTTPException(400, "Pick a food or provide its label values.")
+
+    food = foods_db.get(food_id)
+    if food is None:
+        raise HTTPException(404, "Unknown food.")
+
     record = pets_db.add_feeding(FeedingRecord(
-        pet_id=pet.id, recorded_on=body.recorded_on, food_brand=body.food_brand,
-        portion_cups=body.portion_cups, meals_per_day=body.meals_per_day,
-        note=body.note,
+        pet_id=pet.id, recorded_on=body.recorded_on, grams=body.grams,
+        food_id=food.id, food_brand=food.name,
+        meals_per_day=body.meals_per_day, note=body.note,
+    ))
+    return {
+        "id": record.id,
+        "food": _food_dict(food),
+        "created_food": created is not None,
+        "meal": {
+            "kcal": nutrition.meal(food, body.grams).kcal,
+            "protein_g": nutrition.meal(food, body.grams).protein_g,
+        },
+    }
+
+
+# --- Vaccinations --------------------------------------------------------
+
+@app.get("/api/vaccines")
+def get_vaccines(lang: str = config.DEFAULT_LANGUAGE) -> dict:
+    """Doses given, and what is due next for each vaccine."""
+    pet = _pet_or_404()
+    schedule = {v["key"]: v for v in vaccines.schedule_for(pet.species)}
+
+    return {
+        "records": [
+            {
+                "id": r.id,
+                "given_on": r.given_on.isoformat(),
+                "vaccine_key": r.vaccine_key,
+                "name": (schedule.get(r.vaccine_key, {}).get(
+                    "name_tr" if lang == "tr" else "name_en", r.vaccine_key)),
+                "vet_name": r.vet_name,
+                "batch": r.batch,
+                "note": r.note,
+                "next_due_on": r.next_due_on.isoformat() if r.next_due_on else None,
+            }
+            for r in reversed(pets_db.vaccines(pet.id))
+        ],
+        "due": [
+            {
+                "key": d.key,
+                "name": d.name(lang),
+                "core": d.core,
+                "doses_given": d.doses_given,
+                "last_given": d.last_given.isoformat() if d.last_given else None,
+                "due_on": d.due_on.isoformat() if d.due_on else None,
+                "status": d.status,
+                "days_until": d.days_until,
+                "reason": d.reason(lang),
+            }
+            for d in vaccines.due_list(pet)
+        ],
+        "catalogue": [
+            {"key": v["key"],
+             "name": v["name_tr"] if lang == "tr" else v["name_en"],
+             "core": v["core"]}
+            for v in vaccines.schedule_for(pet.species)
+        ],
+    }
+
+
+@app.post("/api/vaccines")
+def post_vaccine(body: VaccineIn) -> dict:
+    pet = _pet_or_404()
+    record = pets_db.add_vaccine(VaccineRecord(
+        pet_id=pet.id, given_on=body.given_on, vaccine_key=body.vaccine_key,
+        vet_name=body.vet_name, batch=body.batch, note=body.note,
+        next_due_on=body.next_due_on,
     ))
     return {"id": record.id}
+
+
+@app.delete("/api/vaccines/{record_id}")
+def delete_vaccine(record_id: int) -> dict:
+    pets_db.delete_vaccine(record_id)
+    return {"deleted": record_id}
+
+
+# --- Food catalogue ------------------------------------------------------
+
+@app.get("/api/foods")
+def get_foods(species: Optional[str] = None) -> dict:
+    """Foods this animal could eat. Samples are flagged, not hidden."""
+    if species is None:
+        pet = pets_db.first_pet()
+        species = pet.species if pet else None
+    return {"foods": [_food_dict(f) for f in foods_db.list_foods(species)]}
+
+
+@app.post("/api/foods")
+def post_food(body: FoodIn) -> dict:
+    if foods_db.get_by_name(body.name) is not None:
+        raise HTTPException(409, "A food with that name already exists.")
+    food = foods_db.save(Food(**body.model_dump(exclude={"id"})))
+    return _food_dict(food)
+
+
+@app.delete("/api/foods/{food_id}")
+def delete_food(food_id: int) -> dict:
+    foods_db.delete(food_id)
+    return {"deleted": food_id}
+
+
+# --- Nutrition -----------------------------------------------------------
+
+@app.get("/api/nutrition")
+def get_nutrition() -> dict:
+    """Energy and macros: what is being fed against what is needed."""
+    pet = _pet_or_404()
+    analysis = nutrition.analyse(pet)
+    if analysis is None:
+        return {"available": False, "reason": "no_weight"}
+    if analysis.get("food") is None:
+        return {"available": False, "reason": "no_food", "energy": analysis["energy"]}
+    return {"available": True, **analysis}
+
+
+@app.get("/api/nutrition/compare")
+def compare_nutrition(ids: str = "") -> dict:
+    """Same animal, several foods: how many grams a day each would take."""
+    pet = _pet_or_404()
+    if ids.strip():
+        food_ids = [int(part) for part in ids.split(",") if part.strip().isdigit()]
+    else:
+        food_ids = [f.id for f in foods_db.list_foods(pet.species)]
+    return {"foods": nutrition.compare_foods(pet, food_ids)}
 
 
 @app.post("/api/records/stool")
