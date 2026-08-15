@@ -13,18 +13,8 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Dict, List, Optional
 
-from . import pets_db
+from . import nutrition, pets_db, vaccines
 from .models import Insight, Pet
-
-# Portion guidance by brand, cups per day for a mid-size adult dog. In a real
-# product this would come from the manufacturer; here it is a small lookup so
-# the "fed 2.5 where the guide says 2.0" comparison has something to stand on.
-PORTION_GUIDE: Dict[str, float] = {
-    "acme premium": 2.0,
-    "acme adult": 2.25,
-    "vetline balance": 2.0,
-    "naturepet complete": 2.5,
-}
 
 WEIGHT_TREND_WEEKS = 3
 STOOL_WINDOW_DAYS = 30
@@ -63,11 +53,17 @@ def format_date(value: date, lang: str = "en") -> str:
     return f"{value.day} {months[value.month - 1]} {value.year}"
 
 
-def portion_guidance(brand: Optional[str]) -> Optional[float]:
-    """Recommended cups per day for a brand, if we know it."""
-    if not brand:
+def portion_guidance(pet: Pet) -> Optional[float]:
+    """Recommended grams per day for this animal on its current food.
+
+    Earlier this was a hardcoded table of cups per brand, which was invented.
+    It is now derived: energy requirement divided by the food's energy density,
+    both of which are real numbers.
+    """
+    analysis = nutrition.analyse(pet)
+    if not analysis or not analysis.get("food"):
         return None
-    return PORTION_GUIDE.get(brand.strip().lower())
+    return analysis["required"]["food_grams"]
 
 
 def weight_change(pet_id: int, weeks: int = WEIGHT_TREND_WEEKS) -> Optional[float]:
@@ -104,6 +100,9 @@ def summary(pet: Pet) -> dict:
         over_kg = round(latest.weight_kg - pet.target_weight_kg, 2)
         over_pct = round(over_kg / pet.target_weight_kg * 100, 1)
 
+    analysis = nutrition.analyse(pet)
+    food = analysis.get("food") if analysis else None
+
     return {
         "current_weight_kg": latest.weight_kg if latest else None,
         "measured_on": latest.recorded_on.isoformat() if latest else None,
@@ -113,9 +112,11 @@ def summary(pet: Pet) -> dict:
         "weight_change_kg": change,
         "weight_change_weeks": WEIGHT_TREND_WEEKS,
         "stool_normal_pct": round(ratio * 100) if ratio is not None else None,
-        "food_brand": feeding.food_brand if feeding else None,
-        "portion_cups": feeding.portion_cups if feeding else None,
-        "recommended_cups": portion_guidance(feeding.food_brand) if feeding else None,
+        "food_name": (food or {}).get("name") or (feeding.food_brand if feeding else None),
+        "grams": feeding.grams if feeding else None,
+        "recommended_grams": analysis["required"]["food_grams"] if food else None,
+        "daily_kcal_need": analysis["energy"]["mer_kcal"] if analysis else None,
+        "served_kcal": analysis["served"]["kcal"] if food else None,
     }
 
 
@@ -130,11 +131,49 @@ def generate(pet: Pet) -> List[Insight]:
     _check_weight_and_food(pet, data, found)
     _check_weight_loss(pet, data, found)
     _check_portion(data, found)
+    _check_macros(pet, found)
     _check_target(data, found)
     _check_stool(data, found)
+    _check_vaccines(pet, found)
     _check_missing_data(pet, data, found)
 
     return found
+
+
+def _check_vaccines(pet: Pet, out: List[Insight]) -> None:
+    """Overdue and upcoming vaccinations."""
+    for due in vaccines.due_list(pet):
+        if due.status == "overdue" and due.core:
+            late = abs(due.days_until)
+            out.append(Insight(
+                level="warning",
+                title_en=f"{due.name_en.split('(')[0].strip()} is overdue",
+                title_tr=f"{due.name_tr.split('(')[0].strip()} gecikmiş",
+                detail_en=(
+                    f"Due {format_date(due.due_on, 'en')}, {late} days ago. "
+                    f"Protection can lapse once a booster is missed; book a "
+                    f"visit and take the vaccination card."
+                ),
+                detail_tr=(
+                    f"{format_date(due.due_on, 'tr')} tarihinde yapılmalıydı, "
+                    f"{late} gün geçmiş. Rapel atlanınca koruma zayıflayabilir; "
+                    f"randevu alıp aşı kartını yanınıza alın."
+                ),
+            ))
+        elif due.status == "due_soon" and due.core:
+            out.append(Insight(
+                level="suggestion",
+                title_en=f"{due.name_en.split('(')[0].strip()} due soon",
+                title_tr=f"{due.name_tr.split('(')[0].strip()} yaklaşıyor",
+                detail_en=(
+                    f"Due {format_date(due.due_on, 'en')}, in "
+                    f"{due.days_until} days."
+                ),
+                detail_tr=(
+                    f"{format_date(due.due_on, 'tr')} tarihinde, "
+                    f"{due.days_until} gün sonra."
+                ),
+            ))
 
 
 def _check_data_quality(pet: Pet, out: List[Insight]) -> None:
@@ -299,47 +338,131 @@ def _check_weight_loss(pet: Pet, data: dict, out: List[Insight]) -> None:
 
 
 def _check_portion(data: dict, out: List[Insight]) -> None:
-    """Portion against the manufacturer's guidance."""
-    portion = data["portion_cups"]
-    recommended = data["recommended_cups"]
-    if portion is None or recommended is None:
+    """Portion against the animal's calculated energy requirement."""
+    grams = data["grams"]
+    recommended = data["recommended_grams"]
+    served_kcal = data["served_kcal"]
+    need_kcal = data["daily_kcal_need"]
+    if grams is None or recommended is None or not need_kcal:
         return
 
-    difference = round(portion - recommended, 2)
-    if abs(difference) < 0.25:
+    difference = grams - recommended
+    share = abs(difference) / recommended if recommended else 0
+    if share < nutrition.ENERGY_TOLERANCE:
         return
 
-    brand = data["food_brand"]
-    if difference > 0:
+    food = data["food_name"]
+    over = difference > 0
+    kcal_gap = abs(served_kcal - need_kcal)
+
+    # The calculated requirement and the scale can disagree. When they do, the
+    # scale wins: it measures what happened, the formula only estimates. Telling
+    # the owner of a gaining, overweight animal to feed more because a formula
+    # says so would be worse than saying nothing.
+    gaining = (data["weight_change_kg"] or 0) > 0
+    above_target = (data["over_target_kg"] or 0) > 0
+
+    if not over and gaining and above_target:
         out.append(Insight(
-            level="suggestion",
-            title_en="Portion is above the guideline",
-            title_tr="Porsiyon önerilenin üzerinde",
+            level="warning",
+            title_en="Recorded intake does not explain the weight gain",
+            title_tr="Kayıtlı alım kilo artışını açıklamıyor",
             detail_en=(
-                f"{brand} suggests {recommended:.1f} cups a day; the record says "
-                f"{portion:.1f}. Reduce gradually rather than in one step, and "
-                f"weigh weekly to see the effect."
+                f"The record shows {grams:.0f} g of {food} a day "
+                f"({served_kcal:.0f} kcal), which is below the calculated "
+                f"requirement of {need_kcal:.0f} kcal — yet weight is rising "
+                f"and is above target. Either something is not being recorded "
+                f"(treats, scraps, a second person feeding) or the estimate is "
+                f"off for this individual. Do not increase the portion on the "
+                f"strength of this figure; weigh weekly and log everything the "
+                f"animal eats for two weeks."
             ),
             detail_tr=(
-                f"{brand} için önerilen günlük porsiyon {recommended:.1f} bardak; "
-                f"kayıtta {portion:.1f} bardak görünüyor. Tek seferde değil, "
-                f"kademeli olarak azaltın ve haftalık tartımla etkisini izleyin."
+                f"Kayıtta günde {grams:.0f} g {food} görünüyor "
+                f"({served_kcal:.0f} kcal), bu hesaplanan {need_kcal:.0f} kcal "
+                f"ihtiyacın altında — ama kilo artıyor ve hedefin üzerinde. "
+                f"Ya kayda girmeyen bir şey var (ödül maması, sofra artığı, "
+                f"başka biri besliyor) ya da tahmin bu birey için sapıyor. "
+                f"Bu sayıya bakarak porsiyonu artırmayın; iki hafta boyunca "
+                f"yenen her şeyi kaydedip haftalık tartın."
             ),
         ))
-    else:
+        return
+
+    out.append(Insight(
+        level="suggestion",
+        title_en="Portion is above the calculated need" if over
+                 else "Portion is below the calculated need",
+        title_tr="Porsiyon hesaplanan ihtiyacın üzerinde" if over
+                 else "Porsiyon hesaplanan ihtiyacın altında",
+        detail_en=(
+            f"{grams:.0f} g of {food} a day is {served_kcal:.0f} kcal, against a "
+            f"calculated requirement of {need_kcal:.0f} kcal — "
+            f"{kcal_gap:.0f} kcal {'over' if over else 'under'}, about "
+            f"{recommended:.0f} g. "
+            + ("Reduce gradually rather than in one step, and weigh weekly."
+               if over else
+               "If this is deliberate weight management, keep watching body "
+               "condition; otherwise check appetite.")
+        ),
+        detail_tr=(
+            f"Günde {grams:.0f} g {food} {served_kcal:.0f} kcal ediyor; "
+            f"hesaplanan ihtiyaç {need_kcal:.0f} kcal — "
+            f"{kcal_gap:.0f} kcal {'fazla' if over else 'eksik'}, yaklaşık "
+            f"{recommended:.0f} g olmalı. "
+            + ("Tek seferde değil kademeli azaltın ve haftalık tartın."
+               if over else
+               "Bilinçli bir zayıflama ise vücut kondisyonunu izleyin; "
+               "değilse iştahı kontrol edin.")
+        ),
+    ))
+
+
+def _check_macros(pet: Pet, out: List[Insight]) -> None:
+    """Protein and fat against the AAFCO minimums for this life stage."""
+    analysis = nutrition.analyse(pet)
+    if not analysis or not analysis.get("food"):
+        return
+
+    served = analysis["served"]
+    limits = analysis["minimums_dm_pct"]
+    stage_en = "growth" if analysis["energy"]["life_stage"] == "growth" else "adult"
+    stage_tr = "yavru" if stage_en == "growth" else "yetişkin"
+
+    if not analysis["meets_protein_minimum"]:
+        gap = abs(analysis["deltas"]["protein_g"])
         out.append(Insight(
-            level="suggestion",
-            title_en="Portion is below the guideline",
-            title_tr="Porsiyon önerilenin altında",
+            level="warning",
+            title_en="Protein below the minimum for this life stage",
+            title_tr="Protein bu yaş için minimumun altında",
             detail_en=(
-                f"{brand} suggests {recommended:.1f} cups a day; the record says "
-                f"{portion:.1f}. If this is intentional weight management, keep "
-                f"an eye on body condition."
+                f"This food provides {served['protein_dm_pct']:.1f}% protein on a "
+                f"dry matter basis; the published minimum for {stage_en} is "
+                f"{limits['protein']:.1f}%. At the current amount that is about "
+                f"{gap:.0f} g a day short. A complete food should meet the "
+                f"minimum on its own — worth checking with a vet."
             ),
             detail_tr=(
-                f"{brand} için önerilen günlük porsiyon {recommended:.1f} bardak; "
-                f"kayıtta {portion:.1f} bardak görünüyor. Kilo kontrolü için "
-                f"bilinçli bir tercihse vücut kondisyonunu takip edin."
+                f"Bu mama kuru madde bazında %{served['protein_dm_pct']:.1f} "
+                f"protein içeriyor; {stage_tr} için yayımlanan minimum "
+                f"%{limits['protein']:.1f}. Mevcut miktarda günde yaklaşık "
+                f"{gap:.0f} g eksik kalıyor. Tam mama minimumu kendi başına "
+                f"karşılamalı — veterinere danışmakta fayda var."
+            ),
+        ))
+
+    if not analysis["meets_fat_minimum"]:
+        out.append(Insight(
+            level="suggestion",
+            title_en="Fat below the minimum for this life stage",
+            title_tr="Yağ bu yaş için minimumun altında",
+            detail_en=(
+                f"{served['fat_dm_pct']:.1f}% fat on a dry matter basis against a "
+                f"minimum of {limits['fat']:.1f}% for {stage_en}."
+            ),
+            detail_tr=(
+                f"Kuru madde bazında %{served['fat_dm_pct']:.1f} yağ; "
+                f"{stage_tr} için minimum %{limits['fat']:.1f}."
             ),
         ))
 
