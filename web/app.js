@@ -90,10 +90,22 @@ function goTo(section) {
 }
 
 function refreshSection(force = false) {
-  if (state.section === "records") loadRecords();
-  if (state.section === "insights") loadInsights();
-  if (state.section === "report") loadReport();
+  const load = {
+    weight: loadWeight,
+    feeding: loadFeeding,
+    stool: loadStool,
+    vaccines: loadVaccines,
+    records: loadRecords,
+    insights: loadInsights,
+    report: loadReport,
+  }[state.section];
+  if (load) load();
   if (state.section === "profile" && force) fillPetForm();
+}
+
+function fmt(key, values) {
+  return Object.entries(values || {}).reduce(
+    (text, [k, v]) => text.replace(`{${k}}`, v), T(key));
 }
 
 /* ---------- Header ---------- */
@@ -105,6 +117,29 @@ function renderPetLine() {
     : "—";
 }
 
+function renderReminder() {
+  const button = $("#reminder");
+  const badge = $("#vaccine-badge");
+  const reminder = state.status && state.status.reminder;
+
+  if (!reminder) {
+    button.hidden = true;
+    badge.hidden = true;
+    return;
+  }
+
+  const overdue = reminder.status === "overdue";
+  const days = Math.abs(reminder.days_until);
+  button.hidden = false;
+  button.classList.toggle("is-overdue", overdue);
+  button.textContent = `💉 ${reminder.name.split("(")[0].trim()} · ` +
+    fmt(overdue ? "vac.overdue" : "vac.due_soon", { days });
+  button.onclick = () => goTo("vaccines");
+
+  badge.hidden = !overdue;
+  badge.textContent = "!";
+}
+
 /* ---------- Profile ---------- */
 
 function fillPetForm() {
@@ -113,7 +148,8 @@ function fillPetForm() {
   if (!pet) return;
   for (const [key, value] of Object.entries(pet)) {
     const input = form.elements[key];
-    if (input && value !== null && value !== undefined) input.value = value;
+    if (!input || value === null || value === undefined) continue;
+    input.value = key === "neutered" ? String(value) : value;
   }
 }
 
@@ -129,12 +165,14 @@ async function savePet(event) {
     sex: data.sex || null,
     target_weight_kg: data.target_weight_kg ? Number(data.target_weight_kg) : null,
     owner_name: data.owner_name || null,
+    neutered: data.neutered === "" ? null : data.neutered === "true",
   };
   try {
     state.pet = await api(`/api/pet?lang=${state.lang}`, {
       method: "PUT", body: JSON.stringify(body),
     });
     renderPetLine();
+    renderSuggestions();
     toast(T("toast.saved"));
   } catch (err) {
     toast(T("toast.error"));
@@ -150,70 +188,154 @@ async function addRecord(event) {
   const kind = form.dataset.record;
   const raw = Object.fromEntries(new FormData(form));
 
-  const body = { recorded_on: raw.recorded_on };
+  let path = `/api/records/${kind}`;
+  let body;
+
   if (kind === "weight") {
-    body.weight_kg = Number(raw.weight_kg);
-  } else if (kind === "feeding") {
-    body.food_brand = raw.food_brand;
-    body.portion_cups = Number(raw.portion_cups);
-    body.meals_per_day = raw.meals_per_day ? Number(raw.meals_per_day) : null;
+    body = { recorded_on: raw.recorded_on, weight_kg: Number(raw.weight_kg) };
+  } else if (kind === "stool") {
+    body = {
+      recorded_on: raw.recorded_on,
+      quality: raw.quality,
+      frequency_per_day: raw.frequency_per_day
+        ? Number(raw.frequency_per_day) : null,
+    };
+  } else if (kind === "vaccine") {
+    path = "/api/vaccines";
+    body = {
+      given_on: raw.given_on,
+      vaccine_key: raw.vaccine_key,
+      vet_name: raw.vet_name || null,
+      next_due_on: raw.next_due_on || null,
+    };
   } else {
-    body.quality = raw.quality;
-    body.frequency_per_day = raw.frequency_per_day
-      ? Number(raw.frequency_per_day) : null;
+    body = {
+      recorded_on: raw.recorded_on,
+      grams: Number(raw.grams),
+      meals_per_day: raw.meals_per_day ? Number(raw.meals_per_day) : null,
+    };
+    if (raw.food_id === "other") {
+      body.new_food = {
+        name: raw.nf_name,
+        species: (state.pet && state.pet.species) || "both",
+        pack_size_g: raw.nf_pack_size_g ? Number(raw.nf_pack_size_g) : null,
+        kcal_per_100g: Number(raw.nf_kcal_per_100g) || estimateKcal(raw),
+        protein_pct: Number(raw.nf_protein_pct) || 0,
+        fat_pct: Number(raw.nf_fat_pct) || 0,
+        fibre_pct: Number(raw.nf_fibre_pct) || 0,
+        moisture_pct: raw.nf_moisture_pct ? Number(raw.nf_moisture_pct) : 10,
+        ash_pct: Number(raw.nf_ash_pct) || 0,
+      };
+    } else {
+      body.food_id = Number(raw.food_id);
+    }
   }
 
   try {
-    await api(`/api/records/${kind}`, { method: "POST", body: JSON.stringify(body) });
+    await api(path, { method: "POST", body: JSON.stringify(body) });
     form.reset();
     setToday(form);
+    $("#new-food").hidden = true;
     toast(T("toast.added"));
-    loadRecords();
+    await loadFoods();
+    refreshSection();
+    state.status = await api(`/api/status?lang=${state.lang}`);
+    renderReminder();
   } catch (err) {
     toast(T("toast.error"));
     console.error(err);
   }
 }
 
-async function loadRecords() {
-  let data;
-  try {
-    data = await api("/api/records");
-  } catch {
-    return;
-  }
+/* Atwater-style estimate, used only when the label omits the calorie figure —
+   many bags do. Protein and carbohydrate ~3.5 kcal/g, fat ~8.5 kcal/g, with
+   carbohydrate taken as whatever is left after the other fractions. */
+function estimateKcal(raw) {
+  const protein = Number(raw.nf_protein_pct) || 0;
+  const fat = Number(raw.nf_fat_pct) || 0;
+  const fibre = Number(raw.nf_fibre_pct) || 0;
+  const moisture = raw.nf_moisture_pct ? Number(raw.nf_moisture_pct) : 10;
+  const ash = Number(raw.nf_ash_pct) || 0;
+  const carbs = Math.max(0, 100 - protein - fat - fibre - moisture - ash);
+  return Math.round(protein * 3.5 + fat * 8.5 + carbs * 3.5);
+}
 
-  const rows = [];
-  data.weights.forEach((r) => rows.push({
-    date: r.recorded_on, kind: T("rec.weight"),
-    value: `${num(r.weight_kg)} kg`, note: "",
-  }));
-  data.feedings.forEach((r) => rows.push({
-    date: r.recorded_on, kind: T("rec.feeding"),
-    value: `${num(r.portion_cups)} ${state.lang === "tr" ? "bardak" : "cups"}`,
-    note: r.recommended_cups
-      ? `${r.food_brand} · ${state.lang === "tr" ? "önerilen" : "guideline"} ${num(r.recommended_cups)}`
-      : r.food_brand,
-  }));
-  data.stools.slice(-10).forEach((r) => rows.push({
-    date: r.recorded_on, kind: T("rec.stool"),
-    value: T(`stool.${r.quality}`), note: "",
-  }));
-
-  rows.sort((a, b) => b.date.localeCompare(a.date));
-
-  $("#records-list").innerHTML = rows.slice(0, 24).map((row) => `
+function rowsHtml(rows) {
+  if (!rows.length) return `<p class="hint">—</p>`;
+  return rows.map((row) => `
     <div class="record-row">
       <span class="record-date">${localDate(row.date)}</span>
-      <span class="record-kind">${row.kind}</span>
-      <span class="record-note">${row.note}</span>
+      ${row.kind ? `<span class="record-kind">${row.kind}</span>` : ""}
+      <span class="record-note">${row.note || ""}</span>
       <span class="record-value">${row.value}</span>
     </div>`).join("");
 }
 
+async function fetchRecords() {
+  try {
+    return await api("/api/records");
+  } catch {
+    return null;
+  }
+}
+
+async function loadWeight() {
+  const data = await fetchRecords();
+  if (!data) return;
+  const rows = [...data.weights].reverse().map((r) => ({
+    date: r.recorded_on, value: `${num(r.weight_kg)} kg`,
+  }));
+  $("#weight-list").innerHTML = rowsHtml(rows);
+
+  const points = data.weights.slice(-12).map((r) => ({
+    recorded_on: r.recorded_on, weight_kg: r.weight_kg,
+  }));
+  drawChart(points, state.pet && state.pet.target_weight_kg, "#weight-chart");
+}
+
+async function loadStool() {
+  const data = await fetchRecords();
+  if (!data) return;
+  const rows = [...data.stools].reverse().map((r) => ({
+    date: r.recorded_on,
+    value: T(`stool.${r.quality}`),
+    note: r.frequency_per_day ? `${num(r.frequency_per_day)} / ${state.lang === "tr" ? "gün" : "day"}` : "",
+  }));
+  $("#stool-list").innerHTML = rowsHtml(rows);
+}
+
+async function loadRecords() {
+  const data = await fetchRecords();
+  if (!data) return;
+
+  const rows = [];
+  data.weights.forEach((r) => rows.push({
+    date: r.recorded_on, kind: T("nav.weight"), value: `${num(r.weight_kg)} kg`,
+  }));
+  data.feedings.forEach((r) => rows.push({
+    date: r.recorded_on, kind: T("nav.feeding"),
+    value: `${num(r.grams, 0)} g`, note: r.food_brand || "",
+  }));
+  data.stools.forEach((r) => rows.push({
+    date: r.recorded_on, kind: T("nav.stool"), value: T(`stool.${r.quality}`),
+  }));
+
+  try {
+    const vac = await api(`/api/vaccines?lang=${state.lang}`);
+    vac.records.forEach((r) => rows.push({
+      date: r.given_on, kind: T("nav.vaccines"),
+      value: r.name.split("(")[0].trim(), note: r.vet_name || "",
+    }));
+  } catch { /* vaccines are optional here */ }
+
+  rows.sort((a, b) => b.date.localeCompare(a.date));
+  $("#records-list").innerHTML = rowsHtml(rows.slice(0, 40));
+}
+
 function setToday(root = document) {
   const today = new Date().toISOString().slice(0, 10);
-  $$('input[type="date"][name="recorded_on"]', root).forEach((input) => {
+  $$('input[type="date"][name="recorded_on"], input[type="date"][name="given_on"]',
+     root).forEach((input) => {
     // The API rejects future dates; stop them at the picker so the user gets
     // a constraint rather than an error.
     input.max = today;
@@ -221,13 +343,227 @@ function setToday(root = document) {
   });
 }
 
+/* ---------- Foods and feeding ---------- */
+
+async function loadFoods() {
+  const select = $("#food-select");
+  if (!select) return;
+
+  let foods = [];
+  try {
+    foods = (await api("/api/foods")).foods;
+  } catch { /* fall through to the Other option */ }
+
+  state.foods = foods;
+  const options = foods.map((f) => {
+    const flag = f.is_sample ? ` (${T("food.sample")})` : "";
+    const pack = f.pack_size_g ? ` · ${num(f.pack_size_g, 0)} g` : "";
+    return `<option value="${f.id}">${escapeHtml(f.name)}${pack}${flag}</option>`;
+  });
+  options.push(`<option value="other">${T("food.other")}</option>`);
+  select.innerHTML = options.join("");
+
+  select.onchange = () => {
+    const other = select.value === "other";
+    $("#new-food").hidden = !other;
+    $$("#new-food input").forEach((i) => {
+      if (i.name === "nf_name") i.required = other;
+    });
+  };
+
+  if (!foods.length) {
+    select.value = "other";
+    select.onchange();
+  }
+}
+
+async function loadFeeding() {
+  await loadFoods();
+
+  const data = await fetchRecords();
+  if (data) {
+    const rows = [...data.feedings].reverse().map((r) => ({
+      date: r.recorded_on,
+      value: `${num(r.grams, 0)} g`,
+      note: [r.food_brand, r.meals_per_day
+        ? `${r.meals_per_day} ${state.lang === "tr" ? "öğün" : "meals"}` : ""]
+        .filter(Boolean).join(" · "),
+    }));
+    $("#feeding-list").innerHTML = rowsHtml(rows);
+  }
+
+  await loadNutrition();
+}
+
+function ring(percent, value, label, sub, colour) {
+  const radius = 32, circumference = 2 * Math.PI * radius;
+  const filled = Math.min(percent, 150) / 100 * circumference;
+  return `
+    <div class="ring">
+      <svg viewBox="0 0 84 84">
+        <circle class="ring-track" cx="42" cy="42" r="${radius}"></circle>
+        <circle class="ring-fill" cx="42" cy="42" r="${radius}"
+                stroke="${colour}"
+                stroke-dasharray="${filled} ${circumference}"></circle>
+        <text class="ring-value" x="42" y="42">${value}</text>
+      </svg>
+      <div class="ring-label">${label}</div>
+      <div class="ring-sub">${sub}</div>
+    </div>`;
+}
+
+async function loadNutrition() {
+  const box = $("#nutrition-body");
+  if (!box) return;
+
+  let data;
+  try {
+    data = await api("/api/nutrition");
+  } catch {
+    box.innerHTML = "";
+    return;
+  }
+
+  if (!data.available) {
+    box.innerHTML = `<p class="hint">${
+      T(data.reason === "no_weight" ? "nut.no_weight" : "nut.no_food")}</p>`;
+    return;
+  }
+
+  const { energy, food, served, required, deltas } = data;
+  const pct = (a, b) => (b ? Math.round(a / b * 100) : 0);
+
+  const energyPct = pct(served.kcal, energy.mer_kcal);
+  const proteinPct = pct(served.protein_g, required.protein_g);
+  const fatPct = pct(served.fat_g, required.fat_g);
+  const gramsPct = pct(served.grams, required.food_grams);
+
+  const colour = (p, floorIsMinimum) => {
+    if (floorIsMinimum) return p >= 100 ? "var(--success)" : "var(--danger)";
+    if (p > 110) return "var(--warning)";
+    if (p < 90) return "var(--accent)";
+    return "var(--success)";
+  };
+
+  const deltaText = (value, unit) => {
+    if (Math.abs(value) < 0.5) return `<span class="delta-ok">✓</span>`;
+    const cls = value > 0 ? "delta-over" : "delta-under";
+    const word = value > 0 ? T("nut.over") : T("nut.under");
+    return `<span class="${cls}">${Math.abs(value).toFixed(0)} ${unit} ${word}</span>`;
+  };
+
+  const bagDays = food.pack_size_g && served.grams
+    ? Math.floor(food.pack_size_g / served.grams) : null;
+
+  box.innerHTML = `
+    <div class="rings">
+      ${ring(energyPct, `${energyPct}%`, T("nut.energy"),
+             `${served.kcal.toFixed(0)} / ${energy.mer_kcal} kcal`,
+             colour(energyPct))}
+      ${ring(gramsPct, `${served.grams.toFixed(0)}g`, T("nut.amount"),
+             `${T("nut.need")} ${required.food_grams.toFixed(0)} g`,
+             colour(gramsPct))}
+      ${ring(proteinPct, `${served.protein_g.toFixed(0)}g`, T("nut.protein"),
+             `${T("nut.minimum")} ${required.protein_g.toFixed(0)} g`,
+             colour(proteinPct, true))}
+      ${ring(fatPct, `${served.fat_g.toFixed(0)}g`, T("nut.fat"),
+             `${T("nut.minimum")} ${required.fat_g.toFixed(0)} g`,
+             colour(fatPct, true))}
+    </div>
+
+    <div class="nut-rows">
+      <div class="nut-row">
+        <span class="label">${escapeHtml(food.name)}${
+          food.is_sample ? `<span class="sample-flag">${T("food.sample")}</span>` : ""}</span>
+        <span class="value">${food.kcal_per_100g} kcal/100 g</span>
+      </div>
+      <div class="nut-row">
+        <span class="label">${T("nut.energy")}</span>
+        <span class="value">${served.kcal.toFixed(0)} / ${energy.mer_kcal} kcal &nbsp; ${deltaText(deltas.kcal, "kcal")}</span>
+      </div>
+      <div class="nut-row">
+        <span class="label">${T("nut.protein")}</span>
+        <span class="value">${served.protein_g.toFixed(0)} g · ${served.protein_dm_pct}% DM &nbsp; ${deltaText(deltas.protein_g, "g")}</span>
+      </div>
+      <div class="nut-row">
+        <span class="label">${T("nut.fat")}</span>
+        <span class="value">${served.fat_g.toFixed(0)} g · ${served.fat_dm_pct}% DM &nbsp; ${deltaText(deltas.fat_g, "g")}</span>
+      </div>
+      ${bagDays ? `<div class="nut-row">
+        <span class="label">${T("food.pack")}</span>
+        <span class="value">${fmt("nut.bag_lasts", { days: bagDays })}</span>
+      </div>` : ""}
+    </div>
+
+    <p class="hint">
+      ${fmt("nut.formula", { rer: energy.rer_kcal, factor: energy.factor,
+                             mer: energy.mer_kcal })} —
+      ${fmt(energy.basis === "target" ? "nut.basis_target" : "nut.basis_current",
+            { kg: energy.weight_kg })}
+    </p>
+    <p class="hint">${T("nut.minimums_note").replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")}</p>`;
+}
+
+/* ---------- Vaccines ---------- */
+
+async function loadVaccines() {
+  let data;
+  try {
+    data = await api(`/api/vaccines?lang=${state.lang}`);
+  } catch {
+    return;
+  }
+
+  $("#vaccine-select").innerHTML = data.catalogue.map((v) =>
+    `<option value="${v.key}">${escapeHtml(v.name)}</option>`).join("");
+
+  $("#vaccine-due").innerHTML = data.due.map((d) => {
+    const days = d.days_until;
+    let when = T("vac.unknown"), cls = "ok";
+    if (d.status === "overdue") {
+      when = fmt("vac.overdue", { days: Math.abs(days) }); cls = "overdue";
+    } else if (d.status === "due_soon") {
+      when = fmt("vac.due_soon", { days }); cls = "soon";
+    } else if (d.status === "scheduled") {
+      when = fmt("vac.scheduled", { days }); cls = "ok";
+    }
+
+    const history = d.doses_given
+      ? fmt("vac.last", { date: localDate(d.last_given) })
+      : T("vac.never");
+
+    return `
+      <div class="due due-${d.status}">
+        <div class="due-body">
+          <div class="due-name">
+            ${escapeHtml(d.name)}
+            ${d.core ? `<span class="core-tag">${T("vac.core")}</span>` : ""}
+          </div>
+          <div class="due-meta">${history} · ${escapeHtml(d.reason)}</div>
+        </div>
+        <div class="due-when">
+          <div class="due-date">${d.due_on ? localDate(d.due_on) : "—"}</div>
+          <div class="due-days ${cls}">${when}</div>
+        </div>
+      </div>`;
+  }).join("");
+
+  const rows = data.records.map((r) => ({
+    date: r.given_on,
+    value: r.name.split("(")[0].trim(),
+    note: [r.vet_name, r.batch].filter(Boolean).join(" · "),
+  }));
+  $("#vaccine-list").innerHTML = rows.length
+    ? rowsHtml(rows) : `<p class="hint">${T("vac.empty")}</p>`;
+}
+
 /* ---------- Ask ---------- */
 
 function renderSuggestions() {
   const box = $("#suggestions");
   if (!box) return;
-  box.innerHTML = (SUGGESTIONS[state.lang] || SUGGESTIONS.en)
-    .map((q) => `<button class="chip">${q}</button>`).join("");
+  box.innerHTML = suggestions(state.pet)
+    .map((q) => `<button class="chip">${escapeHtml(q)}</button>`).join("");
   $$(".chip", box).forEach((chip) => {
     chip.onclick = () => { $("#question").value = chip.textContent; askQuestion(); };
   });
@@ -389,9 +725,11 @@ async function loadInsights() {
 
 /* Inline SVG rather than a charting library: one dependency fewer, and no CDN
    for something that has to work offline. */
-function drawChart(points, target) {
+function drawChart(points, target, selector = "#chart") {
+  const host = $(selector);
+  if (!host) return;
   if (!points || points.length < 2) {
-    $("#chart").innerHTML = `<p class="insight-detail">${T("ins.nodata")}</p>`;
+    host.innerHTML = `<p class="hint">${T("ins.nodata")}</p>`;
     return;
   }
 
@@ -427,7 +765,7 @@ function drawChart(points, target) {
     <text class="target-label" x="${W - padX}" y="${y(target) - 5}"
           text-anchor="end">${T("ins.target")} ${target}</text>` : "";
 
-  $("#chart").innerHTML = `
+  host.innerHTML = `
     <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
       ${targetLine}${bars}
     </svg>`;
@@ -522,6 +860,8 @@ async function init() {
     state.pet = state.status.pet;
     renderPetLine();
     fillPetForm();
+    renderSuggestions();   // needs the pet, so it runs again once loaded
+    renderReminder();
     if (!state.pet) toast(T("toast.nopet"));
   } catch (err) {
     toast(T("toast.error"));

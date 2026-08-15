@@ -103,6 +103,136 @@ body {
 }
 .nav-icon { font-size: 15px; width: 18px; text-align: center; }
 
+.nav-group {
+  font-size: 9.5px; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 16px 12px 6px;
+}
+
+.nav-badge {
+  margin-left: auto;
+  min-width: 17px; height: 17px; padding: 0 5px;
+  display: grid; place-items: center;
+  background: var(--warning); color: #17202e;
+  border-radius: 9px;
+  font-size: 10px; font-weight: 700;
+}
+.nav-item.is-active .nav-badge { background: #fff; color: var(--accent); }
+
+/* ---------- Reminder ---------- */
+
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+
+.reminder {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 13px; border-radius: 999px;
+  background: var(--warning-soft);
+  border: 1px solid rgba(245,158,11,.3);
+  color: var(--warning);
+  font: inherit; font-size: 11.5px; font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+  transition: border-color .13s;
+}
+.reminder:hover { border-color: var(--warning); }
+.reminder.is-overdue {
+  background: rgba(239,68,68,.13);
+  border-color: rgba(239,68,68,.32);
+  color: var(--danger);
+}
+
+/* ---------- Subcard (the "Other food" panel) ---------- */
+
+.subcard {
+  margin-top: 18px; padding: 17px 18px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+}
+.subcard-title { font-size: 12.5px; font-weight: 600; margin-bottom: 5px; }
+
+.hint {
+  font-size: 11.5px; color: var(--text-faint);
+  line-height: 1.55; margin-top: 10px;
+}
+.subcard .hint { margin: 0 0 15px; }
+
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+
+/* ---------- Vaccination schedule ---------- */
+
+.due-list { display: flex; flex-direction: column; gap: 9px; }
+
+.due {
+  display: flex; align-items: center; gap: 13px;
+  padding: 13px 15px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  border-left-width: 3px;
+  border-radius: var(--radius-s);
+}
+.due-overdue   { border-left-color: var(--danger); }
+.due-due_soon  { border-left-color: var(--warning); }
+.due-scheduled { border-left-color: var(--border); }
+.due-unknown   { border-left-color: var(--text-faint); }
+
+.due-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.due-name { font-size: 13px; font-weight: 600; }
+.due-meta { font-size: 11.5px; color: var(--text-faint); }
+
+.due-when { text-align: right; white-space: nowrap; }
+.due-date { font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.due-days { font-size: 11px; margin-top: 2px; }
+.due-days.overdue { color: var(--danger); }
+.due-days.soon    { color: var(--warning); }
+.due-days.ok      { color: var(--text-faint); }
+
+.core-tag {
+  padding: 2px 7px; border-radius: 4px;
+  background: var(--accent-soft); color: #93b8fb;
+  font-size: 9.5px; font-weight: 700;
+  letter-spacing: .05em; text-transform: uppercase;
+}
+
+/* ---------- Nutrition ---------- */
+
+.rings {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 14px; margin-bottom: 20px;
+}
+.ring { display: flex; flex-direction: column; align-items: center; gap: 7px; }
+.ring svg { width: 84px; height: 84px; }
+.ring-track { fill: none; stroke: var(--surface-3); stroke-width: 8; }
+.ring-fill {
+  fill: none; stroke-width: 8; stroke-linecap: round;
+  transform: rotate(-90deg); transform-origin: 50% 50%;
+}
+.ring-value {
+  font-size: 14px; font-weight: 650; fill: var(--text-primary, var(--text));
+  text-anchor: middle; dominant-baseline: central;
+}
+.ring-label { font-size: 11px; color: var(--text-dim); text-align: center; }
+.ring-sub { font-size: 10.5px; color: var(--text-faint); }
+
+.nut-rows { display: flex; flex-direction: column; gap: 2px; }
+.nut-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 11px; border-radius: 8px; font-size: 13px;
+}
+.nut-row:nth-child(odd) { background: var(--surface-2); }
+.nut-row .label { color: var(--text-dim); }
+.nut-row .value { margin-left: auto; font-weight: 550; font-variant-numeric: tabular-nums; }
+.delta-over  { color: var(--warning); }
+.delta-under { color: var(--accent); }
+.delta-ok    { color: var(--success); }
+
+.sample-flag {
+  display: inline-block; margin-left: 7px;
+  padding: 1px 7px; border-radius: 4px;
+  background: var(--warning-soft); color: var(--warning);
+  font-size: 9.5px; font-weight: 700; text-transform: uppercase;
+}
+
 /* ---------- Sidebar foot ---------- */
 
 .sidebar-foot { margin-top: auto; display: flex; flex-direction: column; gap: 14px; }
@@ -515,5 +645,7 @@ select option { background: var(--surface-2); }
   .sidebar-foot { margin: 0 0 0 auto; flex-direction: row; align-items: center; }
   .offline-card { display: none; }
   .content, .topbar { padding-left: 18px; padding-right: 18px; }
-  .grid-2, .metrics { grid-template-columns: 1fr; }
+  .grid-2, .grid-3, .metrics { grid-template-columns: 1fr; }
+  .rings { grid-template-columns: repeat(2, 1fr); }
+  .nav-group { display: none; }
 }

@@ -5,10 +5,77 @@
 const I18N = {
   tr: {
     "nav.profile": "Pet Profili",
-    "nav.records": "Sağlık Kaydı",
+    "nav.group.track": "Takip",
+    "nav.weight": "Kilo",
+    "nav.feeding": "Beslenme",
+    "nav.stool": "Dışkı",
+    "nav.vaccines": "Aşılar",
+    "nav.records": "Tüm Kayıtlar",
+    "nav.group.analyse": "Analiz",
     "nav.ask": "Soru-Cevap",
     "nav.insights": "İçgörüler",
     "nav.report": "Vet Raporu",
+
+    "profile.neutered": "Kısırlaştırma",
+    "profile.unknown": "Belirtilmedi",
+    "profile.neutered_yes": "Kısırlaştırılmış",
+    "profile.neutered_no": "Kısırlaştırılmamış",
+    "profile.neutered_hint": "Kısırlaştırma günlük enerji ihtiyacını yaklaşık %12 değiştirdiği için beslenme hesabında kullanılıyor.",
+
+    "rec.food": "Mama Markası",
+    "rec.grams": "Günlük Miktar (g)",
+    "rec.history": "Geçmiş",
+    "rec.all": "Tüm Kayıtlar",
+    "food.other": "Diğer — listede yok",
+    "food.new": "Yeni Mama — Etiketten Girin",
+    "food.hint": "Değerleri paketin arkasındaki analiz panelinden okuyun.",
+    "food.name": "Marka ve Ürün Adı",
+    "food.pack": "Paket (g)",
+    "food.kcal": "Enerji (kcal/100 g)",
+    "food.protein": "Protein (%)",
+    "food.fat": "Yağ (%)",
+    "food.fibre": "Ham Selüloz (%)",
+    "food.moisture": "Nem (%)",
+    "food.ash": "Ham Kül (%)",
+    "food.kcal_guess": "Etikette kalori yoksa boş bırakın; diğer değerlerden yaklaşık {kcal} kcal/100 g hesaplandı.",
+    "food.sample": "örnek",
+    "food.empty": "Katalog boş. \"Diğer\" ile ilk mamanızı ekleyin.",
+
+    "vac.schedule": "Aşı Takvimi",
+    "vac.add": "Yapılan Aşıyı Kaydet",
+    "vac.type": "Aşı",
+    "vac.given": "Yapıldığı Tarih",
+    "vac.vet": "Veteriner",
+    "vac.next": "Sonraki Tarih (kartta yazıyorsa)",
+    "vac.history": "Aşı Geçmişi",
+    "vac.core": "Temel",
+    "vac.overdue": "{days} gün gecikti",
+    "vac.due_soon": "{days} gün kaldı",
+    "vac.scheduled": "{days} gün kaldı",
+    "vac.unknown": "Tarih hesaplanamadı",
+    "vac.never": "Hiç yapılmamış",
+    "vac.last": "Son: {date}",
+    "vac.doses": "{n} doz",
+    "vac.disclaimer": "Takvim ülkeye, ürüne ve hayvana göre değişir. Bu tarihler bir başlangıç noktasıdır, veterinerinizle doğrulayın.",
+    "vac.empty": "Henüz aşı kaydı yok.",
+
+    "nut.title": "Beslenme Analizi",
+    "nut.energy": "Enerji",
+    "nut.protein": "Protein",
+    "nut.fat": "Yağ",
+    "nut.amount": "Miktar",
+    "nut.need": "İhtiyaç",
+    "nut.served": "Verilen",
+    "nut.minimum": "Minimum",
+    "nut.over": "fazla",
+    "nut.under": "eksik",
+    "nut.basis_target": "Hesap hedef kilo ({kg} kg) üzerinden yapıldı; hayvan hedefinin üzerinde.",
+    "nut.basis_current": "Hesap mevcut kilo ({kg} kg) üzerinden yapıldı.",
+    "nut.formula": "RER {rer} kcal × {factor} = {mer} kcal/gün",
+    "nut.no_weight": "Önce bir kilo ölçümü girin.",
+    "nut.no_food": "Önce bir beslenme kaydı girin.",
+    "nut.minimums_note": "Protein ve yağ değerleri AAFCO'nun yayımladığı **minimumlarla** karşılaştırılıyor. Minimum, ideal değil; veteriner tavsiyesi yerine geçmez.",
+    "nut.bag_lasts": "{days} günlük paket",
 
     "offline.title": "Çevrimdışı",
     "offline.detail": "Tüm veriler ve model bu cihazda.",
@@ -82,10 +149,77 @@ const I18N = {
 
   en: {
     "nav.profile": "Pet Profile",
-    "nav.records": "Health Record",
+    "nav.group.track": "Track",
+    "nav.weight": "Weight",
+    "nav.feeding": "Feeding",
+    "nav.stool": "Stool",
+    "nav.vaccines": "Vaccines",
+    "nav.records": "All Records",
+    "nav.group.analyse": "Analyse",
     "nav.ask": "Ask",
     "nav.insights": "Insights",
     "nav.report": "Vet Report",
+
+    "profile.neutered": "Neutered",
+    "profile.unknown": "Not stated",
+    "profile.neutered_yes": "Neutered / spayed",
+    "profile.neutered_no": "Intact",
+    "profile.neutered_hint": "Used in the feeding calculation — neutering changes daily energy need by roughly 12%.",
+
+    "rec.food": "Food",
+    "rec.grams": "Daily Amount (g)",
+    "rec.history": "History",
+    "rec.all": "All Records",
+    "food.other": "Other — not in the list",
+    "food.new": "New Food — enter from the label",
+    "food.hint": "Read the values off the guaranteed analysis panel on the bag.",
+    "food.name": "Brand and Product Name",
+    "food.pack": "Pack Size (g)",
+    "food.kcal": "Energy (kcal/100 g)",
+    "food.protein": "Protein (%)",
+    "food.fat": "Fat (%)",
+    "food.fibre": "Crude Fibre (%)",
+    "food.moisture": "Moisture (%)",
+    "food.ash": "Crude Ash (%)",
+    "food.kcal_guess": "If the label has no calorie figure, leave it blank — about {kcal} kcal/100 g from the other values.",
+    "food.sample": "sample",
+    "food.empty": "The catalogue is empty. Add your first food with \"Other\".",
+
+    "vac.schedule": "Vaccination Schedule",
+    "vac.add": "Record a Dose",
+    "vac.type": "Vaccine",
+    "vac.given": "Date Given",
+    "vac.vet": "Vet",
+    "vac.next": "Next Date (if written on the card)",
+    "vac.history": "Vaccination History",
+    "vac.core": "Core",
+    "vac.overdue": "{days} days overdue",
+    "vac.due_soon": "in {days} days",
+    "vac.scheduled": "in {days} days",
+    "vac.unknown": "Cannot be calculated",
+    "vac.never": "Never given",
+    "vac.last": "Last: {date}",
+    "vac.doses": "{n} doses",
+    "vac.disclaimer": "Schedules vary by country, product and animal. These dates are a starting point — confirm them with your vet.",
+    "vac.empty": "No vaccinations recorded yet.",
+
+    "nut.title": "Nutrition Analysis",
+    "nut.energy": "Energy",
+    "nut.protein": "Protein",
+    "nut.fat": "Fat",
+    "nut.amount": "Amount",
+    "nut.need": "Required",
+    "nut.served": "Served",
+    "nut.minimum": "Minimum",
+    "nut.over": "over",
+    "nut.under": "under",
+    "nut.basis_target": "Calculated from the target weight ({kg} kg), since the animal is above it.",
+    "nut.basis_current": "Calculated from the current weight ({kg} kg).",
+    "nut.formula": "RER {rer} kcal × {factor} = {mer} kcal/day",
+    "nut.no_weight": "Add a weight measurement first.",
+    "nut.no_food": "Add a feeding record first.",
+    "nut.minimums_note": "Protein and fat are compared against AAFCO's published **minimums**. A minimum is not a target, and this is not veterinary advice.",
+    "nut.bag_lasts": "bag lasts {days} days",
 
     "offline.title": "Offline",
     "offline.detail": "All data and the model are on this device.",
@@ -158,20 +292,25 @@ const I18N = {
   },
 };
 
-const SUGGESTIONS = {
-  tr: [
-    "How many DHPP doses does a puppy need?",
-    "Should I reduce Bella's portion?",
-    "Can I use my dog's flea treatment on my cat?",
-    "How do I train my puppy to sit?",
-  ],
-  en: [
-    "How many DHPP doses does a puppy need?",
-    "Should I reduce Bella's portion?",
-    "Can I use my dog's flea treatment on my cat?",
-    "How do I train my puppy to sit?",
-  ],
-};
+/* Suggested questions. The pet's name and species come from the profile —
+   nothing here is tied to the demo animal. */
+function suggestions(pet) {
+  const name = (pet && pet.name) || "my pet";
+  const isCat = pet && pet.species === "cat";
+
+  return [
+    isCat
+      ? "How many FVRCP doses does a kitten need?"
+      : "How many DHPP doses does a puppy need?",
+    `Should I reduce ${name}'s portion?`,
+    isCat
+      ? "Can I use my dog's flea treatment on my cat?"
+      : "Is chocolate dangerous for dogs?",
+    isCat
+      ? "How often should I feed a kitten?"
+      : "How do I train my puppy to sit?",
+  ];
+}
 
 function t(key, lang) {
   return (I18N[lang] && I18N[lang][key]) || I18N.en[key] || key;
