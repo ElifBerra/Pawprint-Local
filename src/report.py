@@ -33,7 +33,8 @@ TEXT: Dict[str, Dict[str, str]] = {
         "history": "WEIGHING HISTORY",
         "nutrition": "NUTRITION",
         "food": "Current food",
-        "portion": "Daily portion",
+        "portion": "Daily amount",
+        "energy_need": "Calculated need",
         "recommended": "recommended",
         "meals": "Meals per day",
         "last_change": "Food last changed",
@@ -66,7 +67,8 @@ TEXT: Dict[str, Dict[str, str]] = {
         "history": "TARTIM GEÇMİŞİ",
         "nutrition": "BESLENME",
         "food": "Mevcut mama",
-        "portion": "Günlük porsiyon",
+        "portion": "Günlük miktar",
+        "energy_need": "Hesaplanan ihtiyaç",
         "recommended": "önerilen",
         "meals": "Günlük öğün",
         "last_change": "Son mama değişikliği",
@@ -132,9 +134,11 @@ def build(pet: Pet, lang: str = config.DEFAULT_LANGUAGE) -> dict:
             for r in pets_db.weights(pet.id, limit=10)
         ],
         "nutrition": {
-            "brand": data["food_brand"],
-            "portion_cups": data["portion_cups"],
-            "recommended_cups": data["recommended_cups"],
+            "brand": data["food_name"],
+            "grams": data["grams"],
+            "recommended_grams": data["recommended_grams"],
+            "served_kcal": data["served_kcal"],
+            "daily_kcal_need": data["daily_kcal_need"],
             "meals_per_day": feeding.meals_per_day if feeding else None,
             "last_change_on": change.recorded_on.isoformat() if change else None,
             "last_change_to": change.food_brand if change else None,
@@ -187,12 +191,16 @@ def _lines(data: dict) -> List[str]:
     nutrition = data["nutrition"]
     add(f"## {t['nutrition']}")
     add(f"{t['food']}|{nutrition['brand'] or t['none']}")
-    if nutrition["portion_cups"] is not None:
-        portion = f"{nutrition['portion_cups']:.1f} {t['cups']}"
-        if nutrition["recommended_cups"] is not None:
-            portion += (f" ({t['recommended']}: "
-                        f"{nutrition['recommended_cups']:.1f})")
+    if nutrition["grams"] is not None:
+        portion = f"{nutrition['grams']:.0f} g"
+        if nutrition["served_kcal"] is not None:
+            portion += f" · {nutrition['served_kcal']:.0f} kcal"
         add(f"{t['portion']}|{portion}")
+    if nutrition["daily_kcal_need"] is not None:
+        need = f"{nutrition['daily_kcal_need']:.0f} kcal"
+        if nutrition["recommended_grams"] is not None:
+            need += f" · {nutrition['recommended_grams']:.0f} g"
+        add(f"{t['energy_need']}|{need}")
     if nutrition["meals_per_day"]:
         add(f"{t['meals']}|{nutrition['meals_per_day']}")
     if nutrition["last_change_on"]:

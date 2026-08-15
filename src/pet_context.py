@@ -62,13 +62,19 @@ def build(pet: Pet, lang: str = "en") -> str:
             f"{data['weight_change_kg']:+.1f} kg"
         )
 
-    if data["food_brand"]:
-        lines.append(f"Current food: {data['food_brand']}")
-    if data["portion_cups"] is not None:
-        line = f"Daily portion: {data['portion_cups']} cups"
-        if data["recommended_cups"] is not None:
-            line += f" (manufacturer guideline: {data['recommended_cups']} cups)"
+    if data["food_name"]:
+        lines.append(f"Current food: {data['food_name']}")
+    if data["grams"] is not None:
+        line = f"Daily amount: {data['grams']:.0f} g"
+        if data["served_kcal"] is not None:
+            line += f" ({data['served_kcal']:.0f} kcal)"
         lines.append(line)
+    if data["daily_kcal_need"] is not None:
+        lines.append(f"Calculated daily energy requirement: "
+                     f"{data['daily_kcal_need']:.0f} kcal")
+    if data["recommended_grams"] is not None:
+        lines.append(f"Amount that would cover it: "
+                     f"{data['recommended_grams']:.0f} g of this food")
 
     feeding = pets_db.current_feeding(pet.id)
     if feeding and feeding.meals_per_day:
@@ -86,6 +92,19 @@ def build(pet: Pet, lang: str = "en") -> str:
             f"Stool normal in the last {insights.STOOL_WINDOW_DAYS} days: "
             f"{data['stool_normal_pct']}%"
         )
+
+    # Findings from the rule engine go in as well. Without them the assistant
+    # answers "is this normal?" from the raw numbers and misses that the rules
+    # already flagged something — an implausible weighing, an overdue vaccine,
+    # a portion that does not match the requirement. The rules did the work;
+    # the model should not have to rediscover it.
+    findings = insights.generate(pet)
+    warnings = [f for f in findings if f.level == "warning"]
+    if warnings:
+        lines.append("")
+        lines.append("ACTIVE WARNINGS — mention any that relate to the question:")
+        for item in warnings:
+            lines.append(f"- {item.title('en')}: {item.detail('en')}")
 
     return "\n".join(lines)
 
