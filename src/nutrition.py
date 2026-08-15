@@ -246,6 +246,149 @@ def analyse(pet: Pet) -> Optional[dict]:
     }
 
 
+def analyse_record(pet: Pet, record_id: int) -> Optional[dict]:
+    """One feeding record on its own, for when a row is clicked."""
+    record = next((r for r in pets_db.feedings(pet.id) if r.id == record_id), None)
+    if record is None:
+        return None
+
+    food = None
+    if record.food_id:
+        food = foods_db.get(record.food_id)
+    if food is None and record.food_brand:
+        food = foods_db.get_by_name(record.food_brand)
+    if food is None:
+        return None
+
+    energy = daily_energy(pet)
+    served = meal(food, record.grams)
+    limits = minimums(pet)
+
+    out = {
+        "record_id": record.id,
+        "recorded_on": record.recorded_on.isoformat(),
+        "meals_per_day": record.meals_per_day,
+        "note": record.note,
+        "food": {"id": food.id, "name": food.name, "is_sample": food.is_sample,
+                 "kcal_per_100g": food.kcal_per_100g},
+        "served": {
+            "grams": served.grams, "kcal": served.kcal,
+            "protein_g": served.protein_g, "fat_g": served.fat_g,
+            "fibre_g": served.fibre_g, "dry_matter_g": served.dry_matter_g,
+            "protein_dm_pct": round(served.protein_dm_pct, 1),
+            "fat_dm_pct": round(served.fat_dm_pct, 1),
+        },
+        "minimums_dm_pct": limits,
+        "meets_protein_minimum": served.protein_dm_pct >= limits["protein"],
+        "meets_fat_minimum": served.fat_dm_pct >= limits["fat"],
+    }
+
+    if record.meals_per_day:
+        per_meal = meal(food, record.grams / record.meals_per_day)
+        out["per_meal"] = {
+            "grams": round(per_meal.grams, 1), "kcal": per_meal.kcal,
+            "protein_g": per_meal.protein_g, "fat_g": per_meal.fat_g,
+        }
+
+    if energy:
+        required = required_grams(pet, food, energy)
+        out["energy"] = energy
+        out["required"] = required
+        out["deltas"] = {
+            "kcal": round(served.kcal - energy["mer_kcal"], 1),
+            "grams": round(served.grams - required["food_grams"], 1),
+            "protein_g": round(served.protein_g - required["protein_g"], 1),
+            "fat_g": round(served.fat_g - required["fat_g"], 1),
+        }
+    return out
+
+
+def daily_series(pet: Pet, days: int) -> List[dict]:
+    """What was fed on each of the last `days` days.
+
+    Feeding records say "from this date, this amount of this food". They are
+    carried forward until the next record, which is how the data is actually
+    entered — nobody logs an identical row every morning.
+    """
+    records = sorted(pets_db.feedings(pet.id), key=lambda r: r.recorded_on)
+    if not records:
+        return []
+
+    today = date.today()
+    out: List[dict] = []
+
+    for offset in range(days - 1, -1, -1):
+        day = today - timedelta(days=offset)
+        active = [r for r in records if r.recorded_on <= day]
+        if not active:
+            out.append({"date": day.isoformat(), "kcal": None, "grams": None,
+                        "protein_g": None, "food": None})
+            continue
+
+        record = active[-1]
+        food = None
+        if record.food_id:
+            food = foods_db.get(record.food_id)
+        if food is None and record.food_brand:
+            food = foods_db.get_by_name(record.food_brand)
+
+        if food is None:
+            out.append({"date": day.isoformat(), "kcal": None,
+                        "grams": record.grams, "protein_g": None, "food": None})
+            continue
+
+        served = meal(food, record.grams)
+        out.append({
+            "date": day.isoformat(), "grams": served.grams, "kcal": served.kcal,
+            "protein_g": served.protein_g, "fat_g": served.fat_g,
+            "food": food.name,
+        })
+
+    return out
+
+
+def analyse_period(pet: Pet, days: int) -> Optional[dict]:
+    """Average daily intake over a window, against the same daily requirement."""
+    energy = daily_energy(pet)
+    if energy is None:
+        return None
+
+    series = daily_series(pet, days)
+    covered = [d for d in series if d["kcal"] is not None]
+    if not covered:
+        return {"days": days, "covered_days": 0, "energy": energy, "series": series}
+
+    count = len(covered)
+    mean = lambda key: round(sum(d[key] for d in covered) / count, 1)
+
+    avg_kcal = mean("kcal")
+    foods = []
+    for day in covered:
+        if day["food"] and day["food"] not in foods:
+            foods.append(day["food"])
+
+    return {
+        "days": days,
+        "covered_days": count,
+        "energy": energy,
+        "foods": foods,
+        "average": {
+            "kcal": avg_kcal,
+            "grams": mean("grams"),
+            "protein_g": mean("protein_g"),
+            "fat_g": mean("fat_g"),
+        },
+        "total": {
+            "kcal": round(sum(d["kcal"] for d in covered)),
+            "grams": round(sum(d["grams"] for d in covered)),
+        },
+        "deltas": {"kcal": round(avg_kcal - energy["mer_kcal"], 1)},
+        "energy_ratio": round(avg_kcal / energy["mer_kcal"], 3)
+        if energy["mer_kcal"] else 0,
+        "series": series,
+    }
+
+
 def compare_foods(pet: Pet, food_ids: List[int]) -> List[dict]:
     """Side by side: how much of each food covers the same daily energy."""
     energy = daily_energy(pet)

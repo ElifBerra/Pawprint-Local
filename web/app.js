@@ -382,17 +382,79 @@ async function loadFeeding() {
 
   const data = await fetchRecords();
   if (data) {
-    const rows = [...data.feedings].reverse().map((r) => ({
-      date: r.recorded_on,
-      value: `${num(r.grams, 0)} g`,
-      note: [r.food_brand, r.meals_per_day
-        ? `${r.meals_per_day} ${state.lang === "tr" ? "öğün" : "meals"}` : ""]
-        .filter(Boolean).join(" · "),
-    }));
-    $("#feeding-list").innerHTML = rowsHtml(rows);
+    const rows = [...data.feedings].reverse();
+    $("#feeding-list").innerHTML = rows.length ? rows.map((r) => `
+      <div class="record-row is-clickable" data-record-id="${r.id}">
+        <span class="record-date">${localDate(r.recorded_on)}</span>
+        <span class="record-note">${escapeHtml([r.food_brand, r.meals_per_day
+          ? `${r.meals_per_day} ${state.lang === "tr" ? "öğün" : "meals"}` : ""]
+          .filter(Boolean).join(" · "))}</span>
+        <span class="record-value">${num(r.grams, 0)} g</span>
+      </div>
+      <div class="record-detail" id="detail-${r.id}" hidden></div>`).join("")
+      : `<p class="hint">—</p>`;
+
+    $$("#feeding-list .record-row").forEach((row) => {
+      row.onclick = () => toggleRecord(Number(row.dataset.recordId), row);
+    });
   }
 
   await loadNutrition();
+}
+
+/* Clicking a feeding row opens that record on its own — what that amount of
+   that food delivers, and per meal if the number of meals was recorded. */
+async function toggleRecord(id, row) {
+  const box = $(`#detail-${id}`);
+  if (!box) return;
+
+  if (!box.hidden) {
+    box.hidden = true;
+    row.classList.remove("is-open");
+    return;
+  }
+
+  $$(".record-detail").forEach((d) => (d.hidden = true));
+  $$("#feeding-list .record-row").forEach((r) => r.classList.remove("is-open"));
+
+  let data;
+  try {
+    data = await api(`/api/nutrition/record/${id}`);
+  } catch {
+    box.innerHTML = `<p class="hint">${T("nut.no_food")}</p>`;
+    box.hidden = false;
+    return;
+  }
+
+  const s = data.served;
+  const line = (label, value) =>
+    `<div class="nut-row"><span class="label">${label}</span>` +
+    `<span class="value">${value}</span></div>`;
+
+  const delta = (value, unit) => {
+    if (value === undefined || Math.abs(value) < 0.5) return "";
+    const cls = value > 0 ? "delta-over" : "delta-under";
+    const word = value > 0 ? T("nut.over") : T("nut.under");
+    return ` &nbsp;<span class="${cls}">${Math.abs(value).toFixed(0)} ${unit} ${word}</span>`;
+  };
+  const d = data.deltas || {};
+
+  box.innerHTML = `
+    <div class="nut-rows">
+      ${line(escapeHtml(data.food.name) + (data.food.is_sample
+        ? `<span class="sample-flag">${T("food.sample")}</span>` : ""),
+        `${data.food.kcal_per_100g} kcal/100 g`)}
+      ${line(T("nut.energy"), `${s.kcal.toFixed(0)} kcal${delta(d.kcal, "kcal")}`)}
+      ${line(T("nut.protein"), `${s.protein_g.toFixed(1)} g · ${s.protein_dm_pct}% DM${delta(d.protein_g, "g")}`)}
+      ${line(T("nut.fat"), `${s.fat_g.toFixed(1)} g · ${s.fat_dm_pct}% DM${delta(d.fat_g, "g")}`)}
+      ${data.per_meal ? line(T("nut.per_meal"),
+        `${data.per_meal.grams.toFixed(0)} g · ${data.per_meal.kcal.toFixed(0)} kcal · ${data.per_meal.protein_g.toFixed(1)} g protein`) : ""}
+    </div>
+    ${!data.meets_protein_minimum
+      ? `<p class="hint" style="color:var(--danger)">${T("nut.below_protein")}</p>` : ""}`;
+
+  box.hidden = false;
+  row.classList.add("is-open");
 }
 
 function ring(percent, value, label, sub, colour) {
@@ -416,9 +478,13 @@ async function loadNutrition() {
   const box = $("#nutrition-body");
   if (!box) return;
 
+  const period = state.period || "day";
+  $$("#period-switch .seg").forEach((b) =>
+    b.classList.toggle("is-active", b.dataset.period === period));
+
   let data;
   try {
-    data = await api("/api/nutrition");
+    data = await api(`/api/nutrition?period=${period}`);
   } catch {
     box.innerHTML = "";
     return;
@@ -429,6 +495,8 @@ async function loadNutrition() {
       T(data.reason === "no_weight" ? "nut.no_weight" : "nut.no_food")}</p>`;
     return;
   }
+
+  if (period !== "day") return renderPeriod(box, data);
 
   const { energy, food, served, required, deltas } = data;
   const pct = (a, b) => (b ? Math.round(a / b * 100) : 0);
@@ -502,6 +570,48 @@ async function loadNutrition() {
             { kg: energy.weight_kg })}
     </p>
     <p class="hint">${T("nut.minimums_note").replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")}</p>`;
+}
+
+/* Weekly and monthly: the same daily requirement, against the average of the
+   period. Records say "from this date, this amount", so the days between two
+   records are filled with the earlier one — nobody logs an identical row every
+   morning. */
+function renderPeriod(box, data) {
+  const { energy, average, total, deltas, series, covered_days, days } = data;
+  const need = energy.mer_kcal;
+  const pct = Math.round(average.kcal / need * 100);
+
+  const bars = series.map((d) => {
+    if (d.kcal === null) {
+      return `<div class="spark-bar empty" title="${d.date}"></div>`;
+    }
+    const height = Math.min(d.kcal / (need * 1.6), 1) * 100;
+    const over = d.kcal > need * 1.1;
+    return `<div class="spark-bar ${over ? "over" : ""}"
+                 style="height:${Math.max(height, 4)}%"
+                 title="${d.date}: ${d.kcal.toFixed(0)} kcal"></div>`;
+  }).join("");
+
+  const deltaText = Math.abs(deltas.kcal) < 1
+    ? `<span class="delta-ok">✓</span>`
+    : `<span class="${deltas.kcal > 0 ? "delta-over" : "delta-under"}">` +
+      `${Math.abs(deltas.kcal).toFixed(0)} kcal ` +
+      `${deltas.kcal > 0 ? T("nut.over") : T("nut.under")}</span>`;
+
+  const line = (label, value) =>
+    `<div class="nut-row"><span class="label">${label}</span>` +
+    `<span class="value">${value}</span></div>`;
+
+  box.innerHTML = `
+    <div class="spark">${bars}</div>
+    <div class="nut-rows">
+      ${line(T("nut.avg_daily"), `${average.kcal.toFixed(0)} / ${need} kcal &nbsp; ${deltaText}`)}
+      ${line(T("nut.avg_amount"), `${average.grams.toFixed(0)} g`)}
+      ${line(T("nut.avg_protein"), `${average.protein_g.toFixed(0)} g`)}
+      ${line(T("nut.total"), `${total.kcal.toLocaleString()} kcal · ${(total.grams / 1000).toFixed(1)} kg`)}
+      ${line(T("nut.foods_used"), escapeHtml((data.foods || []).join(", ") || "—"))}
+    </div>
+    <p class="hint">${fmt("nut.coverage", { covered: covered_days, days })}</p>`;
 }
 
 /* ---------- Vaccines ---------- */
@@ -811,8 +921,10 @@ async function loadReport() {
     <div class="report-block">
       <h3>${L.nutrition}</h3>
       ${row(L.food, n.brand || "—")}
-      ${row(L.portion, `${num(n.portion_cups)} ${cups}${n.recommended_cups
-        ? ` (${L.recommended}: ${num(n.recommended_cups)})` : ""}`)}
+      ${n.grams !== null ? row(L.portion, `${num(n.grams, 0)} g${
+        n.served_kcal ? ` · ${num(n.served_kcal, 0)} kcal` : ""}`) : ""}
+      ${n.daily_kcal_need ? row(L.energy_need, `${num(n.daily_kcal_need, 0)} kcal${
+        n.recommended_grams ? ` · ${num(n.recommended_grams, 0)} g` : ""}`) : ""}
       ${n.meals_per_day ? row(L.meals, n.meals_per_day) : ""}
       ${n.last_change_on
         ? row(L.last_change, `${localDate(n.last_change_on)} · ${n.last_change_to}`) : ""}
@@ -851,6 +963,10 @@ async function init() {
   $("#pet-form").onsubmit = savePet;
   $$('form[data-record]').forEach((f) => f.onsubmit = addRecord);
   $("#ask-form").onsubmit = askQuestion;
+  $$("#period-switch .seg").forEach((b) => b.onclick = () => {
+    state.period = b.dataset.period;
+    loadNutrition();
+  });
 
   setToday();
   applyLanguage();
