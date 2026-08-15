@@ -14,7 +14,7 @@ from __future__ import annotations
 import argparse
 from datetime import date, timedelta
 
-from src import pets_db
+from src import foods_db, pets_db
 from src.models import FeedingRecord, Pet, StoolRecord, WeightRecord
 
 # Weeks back from today, and the weight on that day. Near-flat while she was on
@@ -39,6 +39,8 @@ STOOL_PATTERN = ["normal"] * 11 + ["soft"] + ["normal"] * 18
 
 def build(reset: bool) -> Pet:
     pets_db.init_db()
+    foods_db.init_db()
+    foods_db.seed_from_json()
 
     if reset:
         for existing in pets_db.list_pets():
@@ -55,6 +57,7 @@ def build(reset: bool) -> Pet:
         sex="female",
         target_weight_kg=28.0,
         owner_name="Ahmet Yılmaz",
+        neutered=True,
     ))
     print(f"Pet created: {pet.name} (id={pet.id})")
 
@@ -66,24 +69,34 @@ def build(reset: bool) -> Pet:
         ))
     print(f"{len(WEIGHT_CURVE)} weight records added.")
 
-    # The old food, then the switch that the weight curve reacts to.
+    # The scenario: the owner switched food and kept the amount identical.
+    # 420 g of the old food is roughly maintenance for Bella; 420 g of the new
+    # one is about 210 kcal a day more, because it is denser. The bag looks the
+    # same and the scoop looks the same, and the weight goes up anyway.
+    #
+    # That is the point the demo makes: grams are not calories.
+    previous = foods_db.get_by_name("Vetline Balance")   # 330 kcal/100 g
+    current = foods_db.get_by_name("Acme Premium")       # 380 kcal/100 g
+
     pets_db.add_feeding(FeedingRecord(
         pet_id=pet.id,
         recorded_on=today - timedelta(weeks=8),
+        grams=420.0,
+        food_id=previous.id if previous else None,
         food_brand="Vetline Balance",
-        portion_cups=2.0,
         meals_per_day=2,
         note="Previous food",
     ))
     pets_db.add_feeding(FeedingRecord(
         pet_id=pet.id,
         recorded_on=today - timedelta(weeks=4, days=3),
+        grams=420.0,
+        food_id=current.id if current else None,
         food_brand="Acme Premium",
-        portion_cups=2.5,
         meals_per_day=2,
-        note="Switched brands; portion kept by eye rather than by the guide",
+        note="Same amount as before, denser food",
     ))
-    print("2 feeding records added (one change of brand).")
+    print("2 feeding records added — same grams, different energy density.")
 
     for index, quality in enumerate(STOOL_PATTERN):
         pets_db.add_stool(StoolRecord(
@@ -110,7 +123,7 @@ def main() -> None:
 
     pet = build(args.reset)
 
-    from src import insights
+    from src import insights, nutrition
     data = insights.summary(pet)
     print(
         f"\n{pet.name}: {data['current_weight_kg']} kg "
@@ -118,8 +131,22 @@ def main() -> None:
         f"{data['weight_change_kg']:+.1f} kg over "
         f"{data['weight_change_weeks']} weeks)"
     )
-    print(f"Food: {data['food_brand']} {data['portion_cups']} cups "
-          f"(guideline {data['recommended_cups']})")
+
+    analysis = nutrition.analyse(pet)
+    if analysis and analysis.get("food"):
+        energy, served, required = (
+            analysis["energy"], analysis["served"], analysis["required"]
+        )
+        print(f"Food: {analysis['food']['name']} — {served['grams']:.0f} g/day "
+              f"({served['kcal']:.0f} kcal)")
+        print(f"Energy need: {energy['mer_kcal']} kcal "
+              f"(RER {energy['rer_kcal']} x {energy['factor']}, "
+              f"{energy['basis']} weight {energy['weight_kg']} kg)")
+        print(f"Calculated portion: {required['food_grams']:.0f} g/day")
+        print(f"Protein: {served['protein_g']:.0f} g served, "
+              f"{required['protein_g']:.0f} g minimum "
+              f"({served['protein_dm_pct']:.1f}% DM vs "
+              f"{analysis['minimums_dm_pct']['protein']:.1f}% required)")
     print(f"Stool normal: {data['stool_normal_pct']}%\n")
 
     for item in insights.generate(pet):
