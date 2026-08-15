@@ -1,0 +1,99 @@
+{
+  "_note": "Sample data for the demo. Figures are typical of the category but are NOT taken from real products. Enter the values from your own bag's guaranteed analysis panel before relying on any of this.",
+  "_schema": {
+    "kcal_per_100g": "metabolisable energy",
+    "protein_pct": "as fed, from the guaranteed analysis",
+    "fat_pct": "as fed",
+    "fibre_pct": "crude fibre, as fed",
+    "moisture_pct": "as fed",
+    "ash_pct": "as fed, used to derive carbohydrate by difference",
+    "cup_grams": "weight of one standard 240 ml cup of this food",
+    "species": "dog | cat | both"
+  },
+  "foods": [
+    {
+      "name": "Acme Premium",
+      "species": "dog",
+      "kcal_per_100g": 380,
+      "protein_pct": 24.0,
+      "fat_pct": 14.0,
+      "fibre_pct": 3.0,
+      "moisture_pct": 10.0,
+      "ash_pct": 7.0,
+      "cup_grams": 105,
+      "sample": true
+    },
+    {
+      "name": "Acme Adult",
+      "species": "dog",
+      "kcal_per_100g": 350,
+      "protein_pct": 21.0,
+      "fat_pct": 11.0,
+      "fibre_pct": 4.0,
+      "moisture_pct": 10.0,
+      "ash_pct": 7.5,
+      "cup_grams": 100,
+      "sample": true
+    },
+    {
+      "name": "Vetline Balance",
+      "species": "dog",
+      "kcal_per_100g": 330,
+      "protein_pct": 22.0,
+      "fat_pct": 9.5,
+      "fibre_pct": 5.5,
+      "moisture_pct": 10.0,
+      "ash_pct": 7.0,
+      "cup_grams": 98,
+      "sample": true
+    },
+    {
+      "name": "Vetline Light",
+      "species": "dog",
+      "kcal_per_100g": 295,
+      "protein_pct": 25.0,
+      "fat_pct": 7.0,
+      "fibre_pct": 9.0,
+      "moisture_pct": 10.0,
+      "ash_pct": 7.5,
+      "cup_grams": 92,
+      "sample": true
+    },
+    {
+      "name": "NaturePet Complete",
+      "species": "dog",
+      "kcal_per_100g": 400,
+      "protein_pct": 28.0,
+      "fat_pct": 17.0,
+      "fibre_pct": 2.5,
+      "moisture_pct": 9.0,
+      "ash_pct": 6.5,
+      "cup_grams": 110,
+      "sample": true
+    },
+    {
+      "name": "NaturePet Kitten",
+      "species": "cat",
+      "kcal_per_100g": 420,
+      "protein_pct": 36.0,
+      "fat_pct": 20.0,
+      "fibre_pct": 2.0,
+      "moisture_pct": 8.0,
+      "ash_pct": 7.0,
+      "cup_grams": 95,
+      "sample": true
+    },
+    {
+      "name": "Vetline Feline Adult",
+      "species": "cat",
+      "kcal_per_100g": 390,
+      "protein_pct": 32.0,
+      "fat_pct": 15.0,
+      "fibre_pct": 3.0,
+      "moisture_pct": 9.0,
+      "ash_pct": 7.5,
+      "cup_grams": 92,
+      "sample": true
+    }
+  ]
+}
