@@ -308,6 +308,91 @@ Zor negatifler artık modele hiç gitmiyor: 14.9s → 0.6s. Ortalama gecikmedeki
 
 ---
 
+## Koşu 7 — Hayvan kayıtları prompt'a girdiğinde
+
+Kişiselleştirme eklendikten sonra `bench.py` hâlâ `pet=None` ile çalışıyordu;
+yani **kimsenin kullanmadığı bir yolu ölçüyorduk.** Arayüz her soruda hayvanın
+kayıtlarını da gönderiyor. Bench düzeltilip iki yol yan yana ölçüldü.
+
+| | Kayıtsız | Kayıtlarla |
+|---|---|---|
+| Medyan | 15.2s | **67.9s** |
+| Ortalama | 12.1s | 80.4s |
+| En yavaş | 21.3s | 123.4s |
+| Hata | 0 | **2** |
+| Kapsam dışı doğru | 2/2 | **1/2** |
+
+Dört buçuk kat yavaşlama, iki zaman aşımı ve bir korrektlik hatası.
+
+### Sebep prompt uzunluğu değildi
+
+İlk tahmin bağlamın büyümesiydi (594 karakter kayıt bloğu). Ama kayıt bloğu
+prompt'u yaklaşık %30 büyütüyor, süre 4.5 kat artıyordu. Rakamlar tutmuyordu.
+
+Cevaplara bakınca görüldü: kayıtlar varken model **her soruda token tavanına
+dayanıyordu.** Konuşacak daha çok şeyi vardı ve durması için sebep yoktu.
+Ayrıca prompt'un iç etiketlerini tekrarlıyordu — *"According to the REFERENCE
+document [emergency-signs.md]..."*
+
+| Değişiklik | Gerekçe |
+|---|---|
+| `MAX_TOKENS` 256 → 180 | Üretilen token sayısı asıl maliyetti |
+| "en fazla beş cümle" → "en fazla üç cümle" | Beş izni verilince beş yazıyordu |
+| Bölüm adlarını anmak yasaklandı | Prompt yapısı kullanıcıya sızıyordu |
+
+| | Önce | Sonra |
+|---|---|---|
+| Medyan | 67.9s | **15.6s** |
+| Ortalama | 80.4s | 14.6s |
+| En yavaş | 123.4s | 19.6s |
+| Hata | 2 | **0** |
+
+Kayıtları prompt'a koymanın gecikme bedeli **sıfıra indi** — kayıtsız yolla
+(15.2s) eşitlendi.
+
+### Prompt bir güvenlik sınırı değil
+
+Bir hata kaldı: *"Who won the World Cup in 1998?"* sorusu belge eşiğini
+geçemiyordu (0.165) ama hayvanın kayıtları olduğu için model yine çağrılıyor ve
+**"France won the FIFA World Cup in 1998"** cevabı geliyordu.
+
+Prompt sertleştirildi. İşe yaramadı:
+
+> "Tek bildiğin şey aşağıdaki kayıtlar. Başka hiçbir bilgin yok. Veteriner
+> bilgisi yok, genel bilgi yok, dünya hakkında hiçbir şey bilmiyorsun."
+
+Model 1998'de Fransa'nın kazandığını biliyor ve söylüyor. **Bir modele
+"bilmiyormuş gibi yap" demek, mimariye "sorma" demekten zayıf.**
+
+Aynı ders Türkçe bölümünde de çıkmıştı: İngilizce prompt'a "Türkçe yaz"
+talimatı eklemek işe yaramamış, promptu tamamen Türkçe yazmak gerekmişti.
+
+### Çözüm: aynı mekanizmayı ikinci kez uygulamak
+
+Belgeler için eşik vardı, kayıtlar için yoktu. Kayıtların **ne hakkında
+olduğu** bir cümleye çevrilip embed ediliyor ("kilo, hedef kilo, mama, porsiyon,
+protein, dışkı, aşı"), soru ona karşı ölçülüyor. Eşiğin altındaysa model hiç
+çağrılmıyor.
+
+`PET_SIM_THRESHOLDS = {"en": 0.32, "tr": 0.20}` — belge eşiğinden düşük, çünkü
+soruyu düzyazıyla değil bir konu listesiyle karşılaştırıyor.
+
+### Son durum
+
+| Metrik | Sonuç |
+|---|---|
+| Hata | 0 |
+| Kapsam dışı doğru | **2/2** |
+| Medyan | 16.6s |
+| Ortalama | 14.1s |
+| "Dünya Kupası" | **0.6s** — model çağrılmadı |
+| "Fransa'nın başkenti" | 7.6s — kayıt eşiğini geçti, model doğru reddetti |
+
+İki katmanlı savunma: biri soruyu modele hiç göndermiyor, diğeri gönderilenler
+için ret talimatı veriyor. İkincisi tek başına yetmiyordu.
+
+---
+
 ## Türkçe desteği — ölçüm ve karar
 
 Arayüzün Türkçe olması istendi. Belge koleksiyonu İngilizce. İki ayrı soru
