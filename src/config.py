@@ -77,10 +77,33 @@ SIM_THRESHOLDS = {
 def threshold(lang: str = DEFAULT_LANGUAGE) -> float:
     return SIM_THRESHOLDS.get(lang, SIM_THRESHOLD)
 
+
+# A second gate, for when no document cleared the threshold but the animal has
+# records. Without it, "who won the 1998 World Cup" reached the model — the
+# documents had rejected it, but the records were there, so the model was
+# called and answered from memory. No wording of the prompt stopped that.
+#
+# So the question is measured against what the records are about as well. Set
+# lower than the document threshold because it compares a question to a list of
+# subjects rather than to prose.
+PET_SIM_THRESHOLDS = {
+    "en": 0.32,
+    "tr": 0.20,
+}
+
+
+def pet_threshold(lang: str = DEFAULT_LANGUAGE) -> float:
+    return PET_SIM_THRESHOLDS.get(lang, PET_SIM_THRESHOLDS["en"])
+
 # --- Generation ----------------------------------------------------------
 # Answers are short by design. 512 tokens gave the model room to drift into
 # repetition loops on CPU, and every extra token costs real seconds here.
-MAX_TOKENS = 256
+#
+# Cut again from 256 after measuring the pet-aware path: with the animal's
+# records in the prompt the model wrote to the cap on almost every question,
+# taking the median from 15s to 68s and timing out twice. Prompt length was
+# only part of it — the model simply had more to say and no reason to stop.
+MAX_TOKENS = 180
 TEMPERATURE = 0.2
 TOP_P = 0.9
 
@@ -160,25 +183,44 @@ Context:
 # general guideline to this specific animal, or the reverse.
 SYSTEM_PROMPT_WITH_PET = """You are Pawprint, a pet health assistant.
 
-You have two sources. Use both. Do not add anything from outside them.
-
-RECORDS — measured facts about this specific animal:
+This animal's records:
 {pet_context}
 
-REFERENCE — general guidance from the document collection:
+Reference material:
 {context}
 
 Rules:
-- Answer directly in at most five sentences.
-- When RECORDS are relevant, quote the actual numbers rather than generalising.
-- From REFERENCE use only sentences that directly answer the question; ignore
-  unrelated material and never join a fact from one topic onto another.
-- Do not state anything as measured unless it appears in RECORDS.
+- At most three sentences. Stop as soon as the question is answered.
+- Use the animal's actual numbers when they are relevant.
+- Use only reference sentences that directly answer the question.
+- Never mention these sections, their headings, or file names in your answer.
+  Write as if you simply know it.
+- State nothing as measured unless it is in the records.
 - If neither source answers the question, reply with exactly:
   "{fallback}"
-  Say nothing else in that case.
-- Do not diagnose. For urgent or worsening problems, say to contact a vet.
+- Do not diagnose. For urgent problems, say to contact a vet.
 - {language}"""
+
+
+# Used when the animal has records but no document passage cleared the
+# relevance threshold. Without a prompt of its own the model was handed an
+# empty REFERENCE section and filled the gap from its own knowledge — a
+# plausible-sounding health answer with nothing behind it, which is the exact
+# failure the retrieval threshold exists to prevent.
+SYSTEM_PROMPT_RECORDS_ONLY = """You know exactly one thing: the records below.
+
+{pet_context}
+
+You have no other knowledge of any kind. No veterinary knowledge, no general
+knowledge, no facts about the world.
+
+If the answer is not literally in those records, your entire reply is:
+"{fallback}"
+
+Nothing before it, nothing after it, no explanation.
+
+If the answer IS in the records, give it in at most two sentences.
+{language}"""
 
 
 # Turkish prompts are written in Turkish rather than translated at answer time.
@@ -237,8 +279,28 @@ Kurallar:
 - Birimler: kilogram için "kg", porsiyon için "bardak" kullan."""
 
 
-def system_prompt(lang: str = DEFAULT_LANGUAGE, with_pet: bool = False) -> str:
+SYSTEM_PROMPT_RECORDS_ONLY_TR = """Tek bildiğin şey aşağıdaki kayıtlar.
+
+{pet_context}
+
+Başka hiçbir bilgin yok. Veteriner bilgisi yok, genel bilgi yok, dünya hakkında
+hiçbir şey bilmiyorsun.
+
+Cevap bu kayıtların içinde geçmiyorsa, cevabının tamamı şudur:
+"{fallback}"
+
+Öncesinde bir şey yok, sonrasında bir şey yok, açıklama yok.
+
+Cevap kayıtların İÇİNDEYSE en fazla iki cümleyle ver."""
+
+
+def system_prompt(lang: str = DEFAULT_LANGUAGE, with_pet: bool = False,
+                  records_only: bool = False) -> str:
     """The prompt template for a language, written natively in that language."""
     if lang == "tr":
+        if records_only:
+            return SYSTEM_PROMPT_RECORDS_ONLY_TR
         return SYSTEM_PROMPT_WITH_PET_TR if with_pet else SYSTEM_PROMPT_TR
+    if records_only:
+        return SYSTEM_PROMPT_RECORDS_ONLY
     return SYSTEM_PROMPT_WITH_PET if with_pet else SYSTEM_PROMPT

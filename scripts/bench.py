@@ -6,10 +6,11 @@ be compared rather than guessed at. Numbers go into docs/EVALUATION.md.
 Run:  python -m scripts.bench
 """
 
+import argparse
 import statistics
 import time
 
-from src import config, db, foundry, rag
+from src import config, db, foundry, pet_context, pets_db, rag
 
 QUESTIONS = [
     "How often does my puppy need vaccinations?",
@@ -24,6 +25,15 @@ QUESTIONS = [
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--no-pet", action="store_true",
+                        help="ignore the animal's records, to isolate their cost")
+    args = parser.parse_args()
+
+    # The web interface always passes the pet, so a benchmark that leaves it out
+    # measures a path nobody uses. --no-pet exists to price the difference.
+    pet = None if args.no_pet else pets_db.first_pet()
+
     stats = db.stats()
     print(
         f"Config: chunk_size={config.CHUNK_SIZE} overlap={config.CHUNK_OVERLAP} "
@@ -31,7 +41,15 @@ def main():
         f"threshold={config.SIM_THRESHOLD}"
     )
     print(f"Corpus: {stats['chunks']} chunks from {stats['sources']} sources "
-          f"(avg {stats['avg_chars']} chars)\n")
+          f"(avg {stats['avg_chars']} chars)")
+
+    if pet is not None:
+        context = pet_context.build(pet, "en")
+        print(f"Pet: {pet.name} — context {len(context)} chars, "
+              f"{len(context.split())} words")
+    else:
+        print("Pet: none (records excluded)")
+    print()
 
     print("Warming up models...")
     warm = time.perf_counter()
@@ -46,7 +64,7 @@ def main():
 
     for question in QUESTIONS:
         try:
-            result = rag.answer(question)
+            result = rag.answer(question, pet=pet)
         except Exception as exc:
             errors += 1
             print(f"[ ERROR ] {question}\n  {type(exc).__name__}: {exc}\n")

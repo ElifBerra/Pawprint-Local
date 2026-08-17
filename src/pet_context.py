@@ -16,10 +16,71 @@ from typing import List, Optional
 from . import insights, pets_db
 from .models import Pet
 
+# The prompt grows with every warning, and prompt length is the dominant cost
+# on CPU. Three is enough to surface a problem without turning the context into
+# a report.
+MAX_WARNINGS = 3
+
 
 def has_useful_records(pet: Pet) -> bool:
     """Whether there is enough on file to be worth putting in a prompt."""
     return bool(pets_db.weights(pet.id) or pets_db.current_feeding(pet.id))
+
+
+# Embedding of the records blob, keyed by its own text so it is recomputed
+# whenever the records change and reused otherwise.
+_relevance_cache: dict = {}
+
+
+def relevance(pet: Pet, query_vector) -> float:
+    """How close a question is to what the records are actually about.
+
+    The document threshold has no say here, so without this a question the
+    documents rejected still reached the model as long as the animal had
+    records — and the model answered it from its own knowledge. Prompting
+    could not stop that: phi-3.5-mini knows who won the 1998 World Cup and
+    said so however firmly it was told not to.
+
+    The fix is the mechanism the whole project already runs on. Embed what the
+    records are about, measure the angle, and if the question is nowhere near
+    them, do not call the model at all.
+    """
+    from . import embeddings
+
+    text = topics_text(pet)
+    if not text:
+        return 0.0
+
+    if text not in _relevance_cache:
+        _relevance_cache.clear()          # one pet, one entry
+        _relevance_cache[text] = embeddings.embed_one(text)
+
+    vector = _relevance_cache[text]
+    a = embeddings.normalize(vector)
+    b = embeddings.normalize(query_vector)
+    return float(a @ b)
+
+
+def topics_text(pet: Pet) -> str:
+    """What the records can speak to, as a sentence to embed.
+
+    Subjects rather than values: "weight" rather than "5.0 kg". A question is
+    being matched against what the records are about, not against the numbers
+    themselves.
+    """
+    parts = [
+        f"{pet.name} the {pet.species}",
+        "body weight and weight trend",
+        "target weight",
+        "food, brand, daily amount in grams, portion and calories",
+        "protein and fat intake",
+        "stool quality and digestion",
+        "vaccinations and their due dates",
+        "feeding schedule and meals per day",
+    ]
+    if pet.breed:
+        parts.insert(1, pet.breed)
+    return ", ".join(parts)
 
 
 def build(pet: Pet, lang: str = "en") -> str:
@@ -96,15 +157,18 @@ def build(pet: Pet, lang: str = "en") -> str:
     # Findings from the rule engine go in as well. Without them the assistant
     # answers "is this normal?" from the raw numbers and misses that the rules
     # already flagged something — an implausible weighing, an overdue vaccine,
-    # a portion that does not match the requirement. The rules did the work;
-    # the model should not have to rediscover it.
-    findings = insights.generate(pet)
-    warnings = [f for f in findings if f.level == "warning"]
+    # a portion that does not match the requirement.
+    #
+    # Titles only, and capped. The full detail text roughly doubled the prompt,
+    # and on CPU every extra token is measurable time. The title is enough for
+    # the model to raise the flag; the user reads the detail on the Insights
+    # page, where it is rendered from the same rule and not paraphrased.
+    warnings = [f for f in insights.generate(pet) if f.level == "warning"]
     if warnings:
         lines.append("")
-        lines.append("ACTIVE WARNINGS — mention any that relate to the question:")
-        for item in warnings:
-            lines.append(f"- {item.title('en')}: {item.detail('en')}")
+        lines.append("ACTIVE WARNINGS — raise any that relate to the question:")
+        for item in warnings[:MAX_WARNINGS]:
+            lines.append(f"- {item.title('en')}")
 
     return "\n".join(lines)
 

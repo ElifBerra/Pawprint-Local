@@ -76,16 +76,36 @@ def _prepare(
     language = config.LANGUAGE_INSTRUCTION.get(
         lang, config.LANGUAGE_INSTRUCTION["en"]
     )
-    no_passages = "(ilgili pasaj yok)" if lang == "tr" else "(no relevant passages)"
 
     if use_pet:
+        # No passage cleared the threshold. Before falling back on the records,
+        # check the question is even about them — otherwise the model gets
+        # called for something neither source covers and answers from memory.
+        if not relevant:
+            score = pet_context.relevance(pet, retrieve.embed_query(question))
+            logger.info("Records relevance %.3f (limit %.2f)",
+                        score, config.pet_threshold(lang))
+
+            if score < config.pet_threshold(lang):
+                return results, None, False
+
+            prompt = config.system_prompt(lang, records_only=True).format(
+                pet_context=pet_context.build(pet, lang),
+                fallback=config.fallback(lang),
+                language=language,
+            )
+            # The chunks are kept so the interface can still show what was
+            # looked at and how far short it fell; they are simply not in the
+            # prompt.
+            return results, prompt, True
+
         prompt = config.system_prompt(lang, with_pet=True).format(
             pet_context=pet_context.build(pet, lang),
-            context=build_context(results) if relevant else no_passages,
+            context=build_context(results),
             fallback=config.fallback(lang),
             language=language,
         )
-        return results if relevant else [], prompt, True
+        return results, prompt, True
 
     prompt = config.system_prompt(lang, with_pet=False).format(
         fallback=config.fallback(lang),
