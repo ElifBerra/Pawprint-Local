@@ -20,7 +20,26 @@ from typing import List, Optional, Tuple
 from src import foods_db
 from src.models import Food
 
-REQUIRED = ("name", "kcal_per_100g", "protein_pct", "fat_pct")
+REQUIRED = ("name", "protein_pct", "fat_pct")
+
+
+def estimate_kcal(clean: dict) -> float:
+    """Metabolisable energy from the other figures.
+
+    Most bags print the guaranteed analysis but not a calorie figure, so
+    requiring one would block half the catalogue. Modified Atwater factors for
+    pet food: protein and carbohydrate 3.5 kcal/g, fat 8.5 kcal/g, with
+    carbohydrate taken as whatever the other fractions leave.
+
+    An estimate, and flagged as one in the import summary.
+    """
+    protein = clean.get("protein_pct", 0)
+    fat = clean.get("fat_pct", 0)
+    fibre = clean.get("fibre_pct", 0)
+    moisture = clean.get("moisture_pct", 10)
+    ash = clean.get("ash_pct", 0)
+    carbs = max(0.0, 100 - protein - fat - fibre - moisture - ash)
+    return round(protein * 3.5 + fat * 8.5 + carbs * 3.5, 1)
 NUMERIC = ("kcal_per_100g", "protein_pct", "fat_pct", "fibre_pct",
            "moisture_pct", "ash_pct", "pack_size_g")
 
@@ -79,6 +98,10 @@ def parse_row(row: dict, line: int) -> Tuple[Optional[Food], List[str]]:
         problems.append(
             f"line {line}: percentages add up to {total:.1f}%, which is impossible"
         )
+
+    if "kcal_per_100g" not in clean:
+        clean["kcal_per_100g"] = estimate_kcal(clean)
+        clean["_kcal_estimated"] = True
 
     if problems:
         return None, problems

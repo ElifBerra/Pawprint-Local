@@ -1,9 +1,23 @@
 name,species,life_stage,pack_size_g,kcal_per_100g,protein_pct,fat_pct,fibre_pct,moisture_pct,ash_pct
-Peritas Kitten 420 g,cat,kitten,420,,,,,,
-Peritas Kitten 1 kg,cat,kitten,1000,,,,,,
-Peritas Adult 420 g,cat,adult,420,,,,,,
-Peritas Adult 1 kg,cat,adult,1000,,,,,,
-Rico Kitten 420 g,cat,kitten,420,,,,,,
-Rico Kitten 1 kg,cat,kitten,1000,,,,,,
-Rico Adult 420 g,cat,adult,420,,,,,,
-Rico Adult 1 kg,cat,adult,1000,,,,,,
+Pro Plan Kitten Tavuklu 400 g,cat,kitten,400,400,40,20,0.5,6,6.5
+Pro Plan Sterilised Hindi Etli 1.5 kg,cat,adult,1500,350,41,12,4.5,6,7
+Purina ONE Sterilcat Sığır Etli 800 g,cat,adult,800,,37,13,4,8,7.5
+Purina ONE Sterilcat Sığır Etli 1.5 kg,cat,adult,1500,,37,13,4,8,7.5
+Purina ONE Yavru Somonlu Yaş Mama 85 g,cat,kitten,85,,12.5,4,0.5,78,2.4
+Pro Plan Medium Puppy Sensitive Skin Somonlu 12 kg,dog,puppy,12000,,32,20,2.5,8,7.5
+Pro Plan Small&Mini Puppy Healthy Start Tavuklu 3 kg,dog,puppy,3000,,32,21,2,8,8
+Pro Plan Large Robust Puppy Tavuklu 10 kg,dog,puppy,10000,360,29,15,2.5,8,7.5
+Pro Plan Everyday Small-Mini Adult Tavuklu 1.5 kg,dog,adult,1500,370,28,17,2,8,7.5
+Pro Plan Duo Delice Small-Mini Adult Sığır Etli 1.5 kg,dog,adult,1500,371,28,17,2,8.8,7.5
+Pro Plan Small&Mini Adult Sensitive Skin Somonlu 3 kg,dog,adult,3000,,30,18,2.5,8,7.5
+Pro Plan Medium Adult Sensitive Skin Somonlu 3 kg,dog,adult,3000,,29,18,3,8,7
+Pro Plan Medium Adult Sensitive Digestion Kuzu Etli 14 kg,dog,adult,14000,,26,16,2.5,8,7.5
+Pro Plan Veterinary Diets Canine HA Hypoallergenic 3 kg,dog,adult,3000,342,21,10,2,7.5,5.5
+Pro Plan Veterinary Diets Canine NF Renal Function 3 kg,dog,adult,3000,375,13,14.5,2,7,5
+Pro Plan Veterinary Diets Canine HP Hepatic,dog,adult,,381,19,18,3.5,7.5,6
+Pro Plan Veterinary Diets DRM Dermatosis 12 kg,dog,adult,12000,400,30,18,2.5,7.5,7
+Kuru Kedi Maması — Yetişkin (tipik),cat,adult,1500,,32,14,3,8,7
+Kuru Kedi Maması — Kilo Kontrol (tipik),cat,adult,1500,,34,9,8,8,7.5
+Kuru Kedi Maması — Yaşlı (tipik),cat,senior,1500,,31,12,4,8,7
+Yaş Kedi Maması — Yetişkin (tipik),cat,adult,85,,9,5,0.5,80,2.5
+Yaş Köpek Maması — Yetişkin (tipik),dog,adult,400,,9,6,0.5,80,2.5
