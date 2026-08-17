@@ -115,6 +115,41 @@ def _prepare(
     return results, prompt, False
 
 
+def strip_spurious_fallback(text: str) -> str:
+    """Remove the refusal sentence when the model also answered.
+
+    The model sometimes opens with "I don't have that information in my
+    documents" and then answers anyway, from passages that were retrieved and
+    are cited underneath. The refusal is not true — the sources are right
+    there — and leaving it in makes the assistant contradict itself in its own
+    first line.
+
+    The phrase is a control token, not prose. If substantive content follows
+    it, the refusal is spurious and comes out.
+    """
+    if _is_fallback(text):
+        return text
+
+    cleaned = text
+    for phrase in config.FALLBACK_ANSWERS.values():
+        for variant in (phrase, phrase.rstrip("."), f'"{phrase}"'):
+            index = cleaned.lower().find(variant.lower())
+            if index == -1:
+                continue
+            cleaned = (cleaned[:index] + cleaned[index + len(variant):])
+
+    # Tidy what the removal left behind: a leading connective, stray
+    # punctuation, or a doubled space.
+    cleaned = cleaned.strip().lstrip('."” ').strip()
+    for opener in ("However, ", "However ", "Ancak, ", "Ancak ", "But "):
+        if cleaned.startswith(opener):
+            cleaned = cleaned[len(opener):]
+            cleaned = cleaned[0].upper() + cleaned[1:] if cleaned else cleaned
+            break
+
+    return cleaned or text
+
+
 def _is_fallback(text: str) -> bool:
     """Whether the model declined to answer.
 
@@ -186,6 +221,8 @@ def answer(
 
     text = llm.generate(system_prompt, question)
     used_fallback = _is_fallback(text)
+    if not used_fallback:
+        text = strip_spurious_fallback(text)
 
     return Answer(
         text=text,
@@ -242,6 +279,10 @@ def answer_stream(
 
     text = "".join(pieces).strip()
     used_fallback = _is_fallback(text)
+    if not used_fallback:
+        # The stream already showed the refusal; the final Answer carries the
+        # cleaned text and the interface replaces what it displayed with it.
+        text = strip_spurious_fallback(text)
 
     return Answer(
         text=text,

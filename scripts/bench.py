@@ -28,6 +28,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--no-pet", action="store_true",
                         help="ignore the animal's records, to isolate their cost")
+    parser.add_argument("--stream", action="store_true",
+                        help="use the streaming path, which is what the web "
+                             "interface actually calls")
     args = parser.parse_args()
 
     # The web interface always passes the pet, so a benchmark that leaves it out
@@ -64,7 +67,18 @@ def main():
 
     for question in QUESTIONS:
         try:
-            result = rag.answer(question, pet=pet)
+            if args.stream:
+                # Consume it the way the browser does, so the measurement
+                # includes whatever the streaming path costs.
+                generator = rag.answer_stream(question, pet=pet)
+                while True:
+                    try:
+                        next(generator)
+                    except StopIteration as stop:
+                        result = stop.value
+                        break
+            else:
+                result = rag.answer(question, pet=pet)
         except Exception as exc:
             errors += 1
             print(f"[ ERROR ] {question}\n  {type(exc).__name__}: {exc}\n")

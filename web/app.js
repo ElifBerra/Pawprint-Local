@@ -215,28 +215,77 @@ async function addRecord(event) {
       meals_per_day: raw.meals_per_day ? Number(raw.meals_per_day) : null,
     };
     if (raw.food_id === "other") {
+      // A number input still accepts "e" — it is valid scientific notation to
+      // the browser. Number("E") is NaN, JSON turns NaN into null, and what
+      // reached the database was a food with no energy density. The vet report
+      // then asked for 26 kg of food a day.
+      const numeric = (value, fallback = null) => {
+        if (value === undefined || value === null || String(value).trim() === "") {
+          return fallback;
+        }
+        const parsed = Number(String(value).replace(",", "."));
+        return Number.isFinite(parsed) ? parsed : undefined;   // undefined = bad
+      };
+
+      const fields = {
+        protein_pct: numeric(raw.nf_protein_pct),
+        fat_pct: numeric(raw.nf_fat_pct),
+        fibre_pct: numeric(raw.nf_fibre_pct, 0),
+        moisture_pct: numeric(raw.nf_moisture_pct, 10),
+        ash_pct: numeric(raw.nf_ash_pct, 0),
+        pack_size_g: numeric(raw.nf_pack_size_g),
+        kcal_per_100g: numeric(raw.nf_kcal_per_100g),
+      };
+
+      if (Object.values(fields).some((v) => v === undefined)) {
+        toast(T("food.bad_number"));
+        return;
+      }
+      if (!raw.nf_name || !raw.nf_name.trim()) {
+        toast(T("food.need_name"));
+        return;
+      }
+      if (fields.protein_pct === null || fields.fat_pct === null) {
+        toast(T("food.need_macros"));
+        return;
+      }
+
+      const total = fields.protein_pct + fields.fat_pct + fields.fibre_pct +
+                    fields.moisture_pct + fields.ash_pct;
+      if (total > 100) {
+        toast(T("food.over_100"));
+        return;
+      }
+
       body.new_food = {
-        name: raw.nf_name,
+        name: raw.nf_name.trim(),
         species: (state.pet && state.pet.species) || "both",
-        pack_size_g: raw.nf_pack_size_g ? Number(raw.nf_pack_size_g) : null,
-        kcal_per_100g: Number(raw.nf_kcal_per_100g) || estimateKcal(raw),
-        protein_pct: Number(raw.nf_protein_pct) || 0,
-        fat_pct: Number(raw.nf_fat_pct) || 0,
-        fibre_pct: Number(raw.nf_fibre_pct) || 0,
-        moisture_pct: raw.nf_moisture_pct ? Number(raw.nf_moisture_pct) : 10,
-        ash_pct: Number(raw.nf_ash_pct) || 0,
+        pack_size_g: fields.pack_size_g,
+        kcal_per_100g: fields.kcal_per_100g || estimateKcal(fields),
+        protein_pct: fields.protein_pct,
+        fat_pct: fields.fat_pct,
+        fibre_pct: fields.fibre_pct,
+        moisture_pct: fields.moisture_pct,
+        ash_pct: fields.ash_pct,
       };
     } else {
       body.food_id = Number(raw.food_id);
     }
   }
 
+  // The same form both creates and updates; only the verb and the URL differ.
+  const editing = state.editing && state.editing.kind === kind;
+  const method = editing ? "PUT" : "POST";
+  if (editing) path = `${ENDPOINT_FOR[kind]}/${state.editing.id}`;
+
   try {
-    await api(path, { method: "POST", body: JSON.stringify(body) });
+    await api(path, { method, body: JSON.stringify(body) });
+    state.editing = null;
     form.reset();
     setToday(form);
+    markEditing(form, false);
     $("#new-food").hidden = true;
-    toast(T("toast.added"));
+    toast(T(editing ? "toast.updated" : "toast.added"));
     await loadFoods();
     refreshSection();
     state.status = await api(`/api/status?lang=${state.lang}`);
@@ -250,25 +299,142 @@ async function addRecord(event) {
 /* Atwater-style estimate, used only when the label omits the calorie figure —
    many bags do. Protein and carbohydrate ~3.5 kcal/g, fat ~8.5 kcal/g, with
    carbohydrate taken as whatever is left after the other fractions. */
-function estimateKcal(raw) {
-  const protein = Number(raw.nf_protein_pct) || 0;
-  const fat = Number(raw.nf_fat_pct) || 0;
-  const fibre = Number(raw.nf_fibre_pct) || 0;
-  const moisture = raw.nf_moisture_pct ? Number(raw.nf_moisture_pct) : 10;
-  const ash = Number(raw.nf_ash_pct) || 0;
-  const carbs = Math.max(0, 100 - protein - fat - fibre - moisture - ash);
-  return Math.round(protein * 3.5 + fat * 8.5 + carbs * 3.5);
+function estimateKcal(f) {
+  const carbs = Math.max(0, 100 - f.protein_pct - f.fat_pct - f.fibre_pct -
+                            f.moisture_pct - f.ash_pct);
+  return Math.round(f.protein_pct * 3.5 + f.fat_pct * 8.5 + carbs * 3.5);
 }
 
-function rowsHtml(rows) {
+function rowsHtml(rows, editable = null) {
   if (!rows.length) return `<p class="hint">—</p>`;
   return rows.map((row) => `
-    <div class="record-row">
+    <div class="record-row" ${row.id ? `data-id="${row.id}"` : ""}>
       <span class="record-date">${localDate(row.date)}</span>
       ${row.kind ? `<span class="record-kind">${row.kind}</span>` : ""}
       <span class="record-note">${row.note || ""}</span>
       <span class="record-value">${row.value}</span>
+      ${editable && row.id ? `
+        <span class="row-actions">
+          <button class="icon-btn" data-act="edit" data-kind="${editable}"
+                  data-id="${row.id}" title="${T("action.edit")}">✎</button>
+          <button class="icon-btn danger" data-act="del" data-kind="${editable}"
+                  data-id="${row.id}" title="${T("action.delete")}">🗑</button>
+        </span>` : ""}
     </div>`).join("");
+}
+
+/* Wire the edit and delete buttons inside a list. */
+function bindRowActions(container) {
+  $$(".icon-btn", $(container)).forEach((button) => {
+    button.onclick = (event) => {
+      event.stopPropagation();
+      const { act, kind, id } = button.dataset;
+      if (act === "edit") startEdit(kind, Number(id));
+      else deleteRecord(kind, Number(id));
+    };
+  });
+}
+
+/* ---------- Editing ---------- */
+
+const FORM_FOR = {
+  weight: 'form[data-record="weight"]',
+  feeding: 'form[data-record="feeding"]',
+  stool: 'form[data-record="stool"]',
+  vaccine: 'form[data-record="vaccine"]',
+};
+
+const ENDPOINT_FOR = {
+  weight: "/api/records/weight",
+  feeding: "/api/records/feeding",
+  stool: "/api/records/stool",
+  vaccine: "/api/vaccines",
+};
+
+async function startEdit(kind, id) {
+  const form = $(FORM_FOR[kind]);
+  if (!form) return;
+
+  let record;
+  try {
+    const data = kind === "vaccine"
+      ? (await api(`/api/vaccines?lang=${state.lang}`)).records.find((r) => r.id === id)
+      : (await api("/api/records"))[
+          { weight: "weights", feeding: "feedings", stool: "stools" }[kind]
+        ].find((r) => r.id === id);
+    record = data;
+  } catch {
+    toast(T("toast.error"));
+    return;
+  }
+  if (!record) return;
+
+  if (kind === "weight") {
+    form.elements.recorded_on.value = record.recorded_on;
+    form.elements.weight_kg.value = record.weight_kg;
+  } else if (kind === "stool") {
+    form.elements.recorded_on.value = record.recorded_on;
+    form.elements.quality.value = record.quality;
+    form.elements.frequency_per_day.value = record.frequency_per_day ?? "";
+  } else if (kind === "feeding") {
+    form.elements.recorded_on.value = record.recorded_on;
+    form.elements.grams.value = record.grams;
+    form.elements.meals_per_day.value = record.meals_per_day ?? "";
+    if (record.food_id) form.elements.food_id.value = String(record.food_id);
+    $("#new-food").hidden = true;
+  } else {
+    form.elements.given_on.value = record.given_on;
+    form.elements.vaccine_key.value = record.vaccine_key;
+    form.elements.vet_name.value = record.vet_name ?? "";
+    form.elements.next_due_on.value = record.next_due_on ?? "";
+  }
+
+  state.editing = { kind, id };
+  markEditing(form, true);
+  form.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function markEditing(form, on) {
+  form.classList.toggle("is-editing", on);
+  const submit = $("button.btn-primary", form);
+  if (submit) submit.textContent = on ? T("action.update") : T("action.add");
+
+  let cancel = $(".cancel-edit", form);
+  if (on && !cancel) {
+    cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "btn btn-ghost cancel-edit";
+    cancel.textContent = T("action.cancel");
+    cancel.onclick = () => cancelEdit(form);
+    $(".actions", form).prepend(cancel);
+  } else if (!on && cancel) {
+    cancel.remove();
+  }
+}
+
+function cancelEdit(form) {
+  state.editing = null;
+  form.reset();
+  setToday(form);
+  markEditing(form, false);
+  $("#new-food").hidden = true;
+}
+
+async function deleteRecord(kind, id) {
+  if (!confirm(T("confirm.delete"))) return;
+  try {
+    await api(`${ENDPOINT_FOR[kind]}/${id}`, { method: "DELETE" });
+    toast(T("toast.deleted"));
+    if (state.editing && state.editing.id === id) {
+      cancelEdit($(FORM_FOR[kind]));
+    }
+    refreshSection();
+    state.status = await api(`/api/status?lang=${state.lang}`);
+    renderReminder();
+  } catch (err) {
+    toast(T("toast.error"));
+    console.error(err);
+  }
 }
 
 async function fetchRecords() {
@@ -283,9 +449,10 @@ async function loadWeight() {
   const data = await fetchRecords();
   if (!data) return;
   const rows = [...data.weights].reverse().map((r) => ({
-    date: r.recorded_on, value: `${num(r.weight_kg)} kg`,
+    id: r.id, date: r.recorded_on, value: `${num(r.weight_kg)} kg`,
   }));
-  $("#weight-list").innerHTML = rowsHtml(rows);
+  $("#weight-list").innerHTML = rowsHtml(rows, "weight");
+  bindRowActions("#weight-list");
 
   const points = data.weights.slice(-12).map((r) => ({
     recorded_on: r.recorded_on, weight_kg: r.weight_kg,
@@ -297,11 +464,12 @@ async function loadStool() {
   const data = await fetchRecords();
   if (!data) return;
   const rows = [...data.stools].reverse().map((r) => ({
-    date: r.recorded_on,
+    id: r.id, date: r.recorded_on,
     value: T(`stool.${r.quality}`),
     note: r.frequency_per_day ? `${num(r.frequency_per_day)} / ${state.lang === "tr" ? "gün" : "day"}` : "",
   }));
-  $("#stool-list").innerHTML = rowsHtml(rows);
+  $("#stool-list").innerHTML = rowsHtml(rows, "stool");
+  bindRowActions("#stool-list");
 }
 
 async function loadRecords() {
@@ -390,6 +558,12 @@ async function loadFeeding() {
           ? `${r.meals_per_day} ${state.lang === "tr" ? "öğün" : "meals"}` : ""]
           .filter(Boolean).join(" · "))}</span>
         <span class="record-value">${num(r.grams, 0)} g</span>
+        <span class="row-actions">
+          <button class="icon-btn" data-act="edit" data-kind="feeding"
+                  data-id="${r.id}" title="${T("action.edit")}">✎</button>
+          <button class="icon-btn danger" data-act="del" data-kind="feeding"
+                  data-id="${r.id}" title="${T("action.delete")}">🗑</button>
+        </span>
       </div>
       <div class="record-detail" id="detail-${r.id}" hidden></div>`).join("")
       : `<p class="hint">—</p>`;
@@ -397,6 +571,7 @@ async function loadFeeding() {
     $$("#feeding-list .record-row").forEach((row) => {
       row.onclick = () => toggleRecord(Number(row.dataset.recordId), row);
     });
+    bindRowActions("#feeding-list");
   }
 
   await loadNutrition();
@@ -659,12 +834,14 @@ async function loadVaccines() {
   }).join("");
 
   const rows = data.records.map((r) => ({
+    id: r.id,
     date: r.given_on,
     value: r.name.split("(")[0].trim(),
     note: [r.vet_name, r.batch].filter(Boolean).join(" · "),
   }));
   $("#vaccine-list").innerHTML = rows.length
-    ? rowsHtml(rows) : `<p class="hint">${T("vac.empty")}</p>`;
+    ? rowsHtml(rows, "vaccine") : `<p class="hint">${T("vac.empty")}</p>`;
+  bindRowActions("#vaccine-list");
 }
 
 /* ---------- Ask ---------- */

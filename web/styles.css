@@ -242,6 +242,40 @@ body {
 .seg:hover { color: var(--text); }
 .seg.is-active { background: var(--surface-3); color: var(--text); }
 
+/* Always visible. These were revealed on hover, which made them impossible to
+   find and impossible to use at all on a touch screen. */
+.row-actions {
+  display: flex; gap: 3px; margin-left: 12px;
+  flex-shrink: 0;
+}
+
+.icon-btn {
+  width: 28px; height: 28px;
+  display: grid; place-items: center;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-size: 13px; cursor: pointer;
+  transition: background .13s, color .13s, border-color .13s;
+}
+.icon-btn:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+.icon-btn.danger:hover {
+  background: rgba(239,68,68,.13);
+  border-color: rgba(239,68,68,.3);
+  color: var(--danger);
+}
+
+/* A form in edit mode should not look like an empty one. */
+form.is-editing {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
 .record-row.is-clickable { cursor: pointer; transition: background .13s; }
 .record-row.is-clickable:hover { background: var(--surface-3); }
 .record-row.is-open { background: var(--accent-soft); }

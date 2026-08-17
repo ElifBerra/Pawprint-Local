@@ -475,6 +475,102 @@ def post_stool(body: StoolIn) -> dict:
     return {"id": record.id}
 
 
+# --- Editing and deleting records ---------------------------------------
+#
+# A record entered wrongly has to be fixable in the interface. Every figure
+# here feeds a health calculation, so a typo that cannot be corrected is worse
+# than a missing record — it silently distorts trends and advice.
+
+def _owned_or_404(record, pet: Pet):
+    if record is None or record.pet_id != pet.id:
+        raise HTTPException(404, "No such record.")
+    return record
+
+
+@app.put("/api/records/weight/{record_id}")
+def put_weight(record_id: int, body: WeightIn) -> dict:
+    pet = _pet_or_404()
+    record = _owned_or_404(pets_db.get_weight(record_id), pet)
+    record.recorded_on = body.recorded_on
+    record.weight_kg = body.weight_kg
+    pets_db.update_weight(record)
+    return {"id": record.id}
+
+
+@app.delete("/api/records/weight/{record_id}")
+def remove_weight(record_id: int) -> dict:
+    pet = _pet_or_404()
+    _owned_or_404(pets_db.get_weight(record_id), pet)
+    pets_db.delete_weight(record_id)
+    return {"deleted": record_id}
+
+
+@app.put("/api/records/feeding/{record_id}")
+def put_feeding(record_id: int, body: FeedingIn) -> dict:
+    pet = _pet_or_404()
+    record = _owned_or_404(pets_db.get_feeding(record_id), pet)
+
+    food_id = body.food_id
+    if body.new_food is not None:
+        existing = foods_db.get_by_name(body.new_food.name)
+        food_id = existing.id if existing else foods_db.save(
+            Food(**body.new_food.model_dump(exclude={"id"}))
+        ).id
+
+    food = foods_db.get(food_id) if food_id else None
+    if food is None:
+        raise HTTPException(400, "Pick a food or provide its label values.")
+
+    record.recorded_on = body.recorded_on
+    record.grams = body.grams
+    record.food_id = food.id
+    record.food_brand = food.name
+    record.meals_per_day = body.meals_per_day
+    pets_db.update_feeding(record)
+    return {"id": record.id}
+
+
+@app.delete("/api/records/feeding/{record_id}")
+def remove_feeding(record_id: int) -> dict:
+    pet = _pet_or_404()
+    _owned_or_404(pets_db.get_feeding(record_id), pet)
+    pets_db.delete_feeding(record_id)
+    return {"deleted": record_id}
+
+
+@app.put("/api/records/stool/{record_id}")
+def put_stool(record_id: int, body: StoolIn) -> dict:
+    pet = _pet_or_404()
+    record = _owned_or_404(pets_db.get_stool(record_id), pet)
+    record.recorded_on = body.recorded_on
+    record.quality = body.quality
+    record.frequency_per_day = body.frequency_per_day
+    pets_db.update_stool(record)
+    return {"id": record.id}
+
+
+@app.delete("/api/records/stool/{record_id}")
+def remove_stool(record_id: int) -> dict:
+    pet = _pet_or_404()
+    _owned_or_404(pets_db.get_stool(record_id), pet)
+    pets_db.delete_stool(record_id)
+    return {"deleted": record_id}
+
+
+@app.put("/api/vaccines/{record_id}")
+def put_vaccine(record_id: int, body: VaccineIn) -> dict:
+    pet = _pet_or_404()
+    record = _owned_or_404(pets_db.get_vaccine(record_id), pet)
+    record.given_on = body.given_on
+    record.vaccine_key = body.vaccine_key
+    record.vet_name = body.vet_name
+    record.batch = body.batch
+    record.note = body.note
+    record.next_due_on = body.next_due_on
+    pets_db.update_vaccine(record)
+    return {"id": record.id}
+
+
 # --- Insights ------------------------------------------------------------
 
 @app.get("/api/insights")

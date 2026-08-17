@@ -246,6 +246,43 @@ def add_weight(record: WeightRecord) -> WeightRecord:
     return record
 
 
+def update_weight(record: WeightRecord) -> WeightRecord:
+    """Change an existing weighing.
+
+    UNIQUE(pet_id, recorded_on) means moving a record onto a date that already
+    has one would fail. The other row is removed first: two weighings for the
+    same day is not a state the app can represent, and the edit is the more
+    recent intent.
+    """
+    with connect() as conn:
+        conn.execute(
+            "DELETE FROM weight_records WHERE pet_id=? AND recorded_on=? AND id<>?",
+            (record.pet_id, _from_date(record.recorded_on), record.id),
+        )
+        conn.execute(
+            "UPDATE weight_records SET recorded_on=?, weight_kg=? WHERE id=?",
+            (_from_date(record.recorded_on), record.weight_kg, record.id),
+        )
+    return record
+
+
+def get_weight(record_id: int) -> Optional[WeightRecord]:
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT id, pet_id, recorded_on, weight_kg FROM weight_records "
+            "WHERE id=?", (record_id,)
+        ).fetchone()
+    if row is None:
+        return None
+    return WeightRecord(id=row[0], pet_id=row[1], recorded_on=_to_date(row[2]),
+                        weight_kg=row[3])
+
+
+def delete_weight(record_id: int) -> None:
+    with connect() as conn:
+        conn.execute("DELETE FROM weight_records WHERE id=?", (record_id,))
+
+
 def weights(pet_id: int, limit: Optional[int] = None) -> List[WeightRecord]:
     """Weighings oldest first, so charts and trends read left to right."""
     query = (
@@ -290,6 +327,31 @@ def _row_to_feeding(r) -> FeedingRecord:
         id=r[0], pet_id=r[1], recorded_on=_to_date(r[2]), grams=r[3],
         food_id=r[4], food_brand=r[5], meals_per_day=r[6], note=r[7],
     )
+
+
+def update_feeding(record: FeedingRecord) -> FeedingRecord:
+    with connect() as conn:
+        conn.execute(
+            "UPDATE feeding_records SET recorded_on=?, grams=?, food_id=?, "
+            "food_brand=?, meals_per_day=?, note=? WHERE id=?",
+            (_from_date(record.recorded_on), record.grams, record.food_id,
+             record.food_brand, record.meals_per_day, record.note, record.id),
+        )
+    return record
+
+
+def get_feeding(record_id: int) -> Optional[FeedingRecord]:
+    with connect() as conn:
+        row = conn.execute(
+            f"SELECT {FEEDING_COLUMNS} FROM feeding_records WHERE id=?",
+            (record_id,),
+        ).fetchone()
+    return _row_to_feeding(row) if row else None
+
+
+def delete_feeding(record_id: int) -> None:
+    with connect() as conn:
+        conn.execute("DELETE FROM feeding_records WHERE id=?", (record_id,))
 
 
 def feedings(pet_id: int) -> List[FeedingRecord]:
@@ -371,6 +433,60 @@ def vaccines(pet_id: int) -> List[VaccineRecord]:
 def delete_vaccine(record_id: int) -> None:
     with connect() as conn:
         conn.execute("DELETE FROM vaccine_records WHERE id=?", (record_id,))
+
+
+def update_stool(record: StoolRecord) -> StoolRecord:
+    with connect() as conn:
+        conn.execute(
+            "UPDATE stool_records SET recorded_on=?, quality=?, "
+            "frequency_per_day=? WHERE id=?",
+            (_from_date(record.recorded_on), record.quality,
+             record.frequency_per_day, record.id),
+        )
+    return record
+
+
+def get_stool(record_id: int) -> Optional[StoolRecord]:
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT id, pet_id, recorded_on, quality, frequency_per_day "
+            "FROM stool_records WHERE id=?", (record_id,)
+        ).fetchone()
+    if row is None:
+        return None
+    return StoolRecord(id=row[0], pet_id=row[1], recorded_on=_to_date(row[2]),
+                       quality=row[3], frequency_per_day=row[4])
+
+
+def delete_stool(record_id: int) -> None:
+    with connect() as conn:
+        conn.execute("DELETE FROM stool_records WHERE id=?", (record_id,))
+
+
+def update_vaccine(record: VaccineRecord) -> VaccineRecord:
+    with connect() as conn:
+        conn.execute(
+            "UPDATE vaccine_records SET given_on=?, vaccine_key=?, vet_name=?, "
+            "batch=?, note=?, next_due_on=? WHERE id=?",
+            (_from_date(record.given_on), record.vaccine_key, record.vet_name,
+             record.batch, record.note, _from_date(record.next_due_on),
+             record.id),
+        )
+    return record
+
+
+def get_vaccine(record_id: int) -> Optional[VaccineRecord]:
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT id, pet_id, given_on, vaccine_key, vet_name, batch, note, "
+            "next_due_on FROM vaccine_records WHERE id=?", (record_id,)
+        ).fetchone()
+    if row is None:
+        return None
+    return VaccineRecord(
+        id=row[0], pet_id=row[1], given_on=_to_date(row[2]), vaccine_key=row[3],
+        vet_name=row[4], batch=row[5], note=row[6], next_due_on=_to_date(row[7]),
+    )
 
 
 def stools(pet_id: int, since: Optional[date] = None) -> List[StoolRecord]:

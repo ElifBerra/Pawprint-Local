@@ -58,6 +58,33 @@ bu traceback izleyicinin gördüğü ilk şey olmasın.
 
 ---
 
+## Cevaplar bazen 80-180 saniye sürüyor
+
+**Belirti:** Aynı soru bazen 15 saniyede, bazen 3 dakikada cevaplanıyor.
+
+**Sebep: CPU rekabeti.** Model GPU değil CPU kullanıyor. Aynı anda ekran kaydı,
+görüntülü görüşme, ağır bir tarayıcı sekmesi ya da derleme çalışıyorsa çıkarım
+süresi doğrudan katlanıyor. Ölçüldü:
+
+| Durum | Medyan | En yavaş |
+|---|---|---|
+| Makine boştayken | 16.7s | 20.4s |
+| Arka planda yük varken | 18.6s | **84.9s** |
+| Ekran kaydı + görüntülü görüşme | — | **180.2s** |
+
+Bu bir hata değil, CPU çıkarımının doğası. Ama bilmeden demoya girilirse
+felakete dönüşür.
+
+**Demo öncesi kontrol listesi:**
+
+1. Görüntülü görüşme uygulamalarını kapat (Meet, Teams, Zoom)
+2. Ekran kaydını kapat
+3. Gereksiz tarayıcı sekmelerini kapat
+4. Uygulamayı açıp **bir soru sor** — ilk sorgu modeli belleğe alıyor,
+   izleyicinin o gecikmeyi görmesine gerek yok
+
+---
+
 ## Teşhis sırası
 
 Bir şey çalışmadığında sırayla:

@@ -40,6 +40,10 @@ const I18N = {
     "food.kcal_guess": "Etikette kalori yoksa boş bırakın; diğer değerlerden yaklaşık {kcal} kcal/100 g hesaplandı.",
     "food.sample": "örnek",
     "food.empty": "Katalog boş. \"Diğer\" ile ilk mamanızı ekleyin.",
+    "food.bad_number": "Sayı alanlarına yalnızca rakam girin.",
+    "food.need_name": "Marka ve ürün adı gerekli.",
+    "food.need_macros": "Protein ve yağ oranları gerekli — etikette yazıyor.",
+    "food.over_100": "Yüzdelerin toplamı 100'ü geçiyor. Etiketi tekrar kontrol edin.",
 
     "vac.schedule": "Aşı Takvimi",
     "vac.add": "Yapılan Aşıyı Kaydet",
@@ -152,8 +156,15 @@ const I18N = {
     "rep.title": "Veteriner Raporu",
     "rep.download": "PDF İndir",
 
+    "action.edit": "Düzenle",
+    "action.delete": "Sil",
+    "action.update": "Güncelle",
+    "confirm.delete": "Bu kayıt silinsin mi? Geri alınamaz.",
+
     "toast.saved": "Kaydedildi",
     "toast.added": "Kayıt eklendi",
+    "toast.updated": "Kayıt güncellendi",
+    "toast.deleted": "Kayıt silindi",
     "toast.error": "Bir sorun oluştu",
     "toast.nopet": "Önce bir pet profili oluşturun",
   },
@@ -195,6 +206,10 @@ const I18N = {
     "food.kcal_guess": "If the label has no calorie figure, leave it blank — about {kcal} kcal/100 g from the other values.",
     "food.sample": "sample",
     "food.empty": "The catalogue is empty. Add your first food with \"Other\".",
+    "food.bad_number": "Number fields accept digits only.",
+    "food.need_name": "Brand and product name are required.",
+    "food.need_macros": "Protein and fat are required — they are on the label.",
+    "food.over_100": "The percentages add up to more than 100. Check the label.",
 
     "vac.schedule": "Vaccination Schedule",
     "vac.add": "Record a Dose",
@@ -307,8 +322,15 @@ const I18N = {
     "rep.title": "Veterinary Report",
     "rep.download": "Download PDF",
 
+    "action.edit": "Edit",
+    "action.delete": "Delete",
+    "action.update": "Update",
+    "confirm.delete": "Delete this record? This cannot be undone.",
+
     "toast.saved": "Saved",
     "toast.added": "Record added",
+    "toast.updated": "Record updated",
+    "toast.deleted": "Record deleted",
     "toast.error": "Something went wrong",
     "toast.nopet": "Create a pet profile first",
   },
