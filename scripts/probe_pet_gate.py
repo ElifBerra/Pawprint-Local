@@ -15,9 +15,20 @@ being compared against was English, so a Turkish question paid a cross-language
 penalty for no reason — the records are not a document, they are a list this
 project writes itself, and it can write it in Turkish too.
 
-What to look for: every 'answerable' score above every 'out of scope' score, in
-both languages, with room between them. That gap is what the threshold has to
-sit in, and a threshold with no gap around it will be wrong on the day.
+Not every question the records cannot answer is the same kind of problem, and
+the first version of this script failed by treating them alike — it reported
+"no safe threshold exists" for a gate that was working, because it counted a
+harmless pass as a failure. Three groups now:
+
+  answerable   the records hold the answer. Must pass.
+  model knows  capital cities, football results. The model answers these from
+               memory whatever the prompt says, so the threshold is the only
+               defence and needs clear room above them.
+  domain gap   about animals, not in the records. May pass: the records-only
+               prompt refuses them, measured in scripts/probe_records_only.py.
+
+What to look for: every answerable score above every 'model knows' score, with
+room between. The domain-gap lines are information, not failures.
 
 Run:  python -m scripts.probe_pet_gate
 """
@@ -47,17 +58,32 @@ ANSWERABLE = {
     ],
 }
 
-# Should not. Nothing in the records speaks to these.
-OUT_OF_SCOPE = {
+# The gate has to stop these. The model knows the answers and gives them: put
+# past the gate, it replied "Paris fransa'nın başkentinerdir" from a prompt
+# that says it knows only this cat's records. Nothing in the wording holds, so
+# the threshold is the whole defence and needs room above these scores.
+MODEL_KNOWS = {
     "en": [
         "what is the capital of France",
         "who won the world cup in 1998",
-        "how do I train my puppy to sit",
-        "which dog breed is best for an apartment",
     ],
     "tr": [
         "fransa'nın başkenti neresi",
         "1998 dünya kupasını kim kazandı",
+    ],
+}
+
+# These may pass. They are about animals but the records hold no answer, and
+# the records-only prompt refuses them — measured, in both languages, in
+# scripts/probe_records_only.py. They score as high as real questions because
+# they are the same kind of text, and no threshold separates them. Treating
+# that as a failure would mean refusing real questions to prevent a refusal.
+DOMAIN_GAP = {
+    "en": [
+        "how do I train my puppy to sit",
+        "which dog breed is best for an apartment",
+    ],
+    "tr": [
         "köpeğime oturmayı nasıl öğretirim",
         "apartman için en iyi köpek cinsi hangisi",
     ],
@@ -78,30 +104,39 @@ def main() -> None:
         print(f"=== {lang.upper()}   threshold {limit}")
         print(f"topics: {pet_context.topics_text(pet, lang)[:90]}...\n")
 
-        scores = {"yes": [], "no": []}
-        for group, questions in (("yes", ANSWERABLE[lang]),
-                                 ("no", OUT_OF_SCOPE[lang])):
+        groups = (
+            ("answerable — must pass", ANSWERABLE[lang], True),
+            ("model knows — must stop", MODEL_KNOWS[lang], False),
+            ("domain gap — may pass, prompt refuses", DOMAIN_GAP[lang], None),
+        )
+
+        scores = {}
+        for name, questions, must_pass in groups:
+            print(f"  {name}")
+            collected = []
             for question in questions:
                 vector = retrieve.embed_query(question)
                 score = pet_context.relevance(pet, vector, lang)
-                scores[group].append(score)
+                collected.append(score)
 
                 passes = score >= limit
-                # A tick is only good news in the 'yes' group.
-                correct = passes if group == "yes" else not passes
-                print(f"  {score:6.3f}  {'pass' if passes else 'stop'}  "
-                      f"{'  ' if correct else '<<'}  {question}")
+                # None means either outcome is acceptable.
+                wrong = must_pass is not None and passes != must_pass
+                print(f"    {score:6.3f}  {'pass' if passes else 'stop'}  "
+                      f"{'<<' if wrong else '  '}  {question}")
+            scores[name] = collected
             print()
 
-        if scores["yes"] and scores["no"]:
-            low, high = min(scores["yes"]), max(scores["no"])
-            print(f"  lowest answerable  {low:.3f}")
-            print(f"  highest out-of-scope {high:.3f}")
-            print(f"  margin {low - high:+.3f}"
-                  f"{'' if low > high else '   NO SAFE THRESHOLD EXISTS'}")
-            if low > high:
-                print(f"  a threshold anywhere in {high:.3f}–{low:.3f} works; "
-                      f"the middle is {(low + high) / 2:.2f}")
+        low = min(scores["answerable — must pass"])
+        high = max(scores["model knows — must stop"])
+        print(f"  lowest real question     {low:.3f}")
+        print(f"  highest the model knows  {high:.3f}")
+        if low > high:
+            print(f"  margin {low - high:+.3f} — "
+                  f"any threshold in {high:.3f}–{low:.3f} works, "
+                  f"middle {(low + high) / 2:.2f}, currently {limit}")
+        else:
+            print(f"  margin {low - high:+.3f}   NO SAFE THRESHOLD EXISTS")
         print()
 
     foundry.unload_all()

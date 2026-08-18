@@ -767,15 +767,30 @@ Ve o kapı 0.004 farkla duruyordu:
 
 ### Karar
 
-Eşikler tehlikeli sınıfın **yanına** değil **üstüne** taşındı:
+Güvenli bant, kayıtların cevaplayabildiği en düşük soru ile modelin kendi
+bildiği en yüksek soru arasında:
 
-| | gerçek soru geçen | tehlikeli sınıf | marj |
-|---|---|---|---|
-| EN 0.32 → **0.40** | 6/6 | durduruldu | 0.004 → **+0.084** |
-| TR 0.20 → **0.28** | 7/7 | durduruldu | 0.008 → **+0.088** |
+| | EN | TR |
+|---|---|---|
+| en düşük gerçek soru | 0.441 (`next vaccination`) | 0.310 (`aşı ne zaman`) |
+| modelin bildiği en yüksek | 0.316 (Fransa) | 0.274 (**dünya kupası**) |
+| bant genişliği | 0.125 | **0.036** |
+| yeni eşik | 0.32 → **0.40** | 0.20 → **0.29** |
 
-Alan içi ama kayıtlarda olmayan sorular (0.394, 0.426) hâlâ geçiyor — bilerek.
-Prompt onları reddediyor ve bu ölçüldü.
+Gerçek soruların hepsi geçiyor: EN 6/6, TR 7/7.
+
+**Türkçedeki bant İngilizcenin üçte biri.** İlk hesabımda eşiğin Fransa'ya olan
+mesafesini (+0.088) marj sanmıştım; Türkçede tehlikeli sınıfın en yükseği
+Fransa değil, 0.274'lük dünya kupası sorusu. Gerçek marj 0.036 ve eşik onun
+ortasında. Sebebi açık: kayıtları Türkçe karşılaştırınca Türkçe gerçek sorular
+yükseldi, ama Türkçe genel kültür soruları da yükseldi.
+
+Alan içi ama kayıtlarda olmayan sorular (0.426 ve 0.338) hâlâ geçiyor —
+bilerek. Prompt onları reddediyor ve bu ölçüldü.
+
+Ölçüm script'i de düzeltildi: ilk hâli bu iki sınıfı aynı torbaya koyup çalışan
+bir kapı için "güvenli eşik yok" diyordu. Zararsız bir geçişi başarısızlık
+sayan bir ölçüm, ölçtüğü şeyi bozmaya götürür.
 
 **Ders: ölçmediğin şeyi ayarlamış sayılmazsın.** Bu kapı iki ayrı hatayı
 önlemek için kuruldu, doğru çalıştığı varsayıldı, ve değerlendirme setinin onu

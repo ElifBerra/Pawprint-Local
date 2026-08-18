@@ -112,24 +112,32 @@ def threshold(lang: str = DEFAULT_LANGUAGE) -> float:
 # they get through: forced past the gate, it replied "Paris fransa'nın
 # başkentinerdir" — broken Turkish, right answer, no records involved.
 #
-# Raised so that the gap sits above that class rather than beside it:
+# Raised so the threshold sits above that class rather than beside it. The band
+# is bounded by the lowest question the records can answer and the highest one
+# the model knows by itself:
 #
-#                        EN                      TR
-#   lowest real question 0.441                   0.310
-#   threshold            0.40                    0.28
-#   highest of the       0.316 (France)          0.192 (France)
-#     dangerous class
-#   margin               +0.084                  +0.088
+#                              EN                       TR
+#   lowest real question       0.441  next vaccination  0.310  aşı ne zaman
+#   highest the model knows    0.316  France            0.274  1998 World Cup
+#   safe band                  0.125 wide              0.036 wide
+#   threshold                  0.40                     0.29
+#
+# Turkish has a third of the room English does, and it is worth being plain
+# about why: the records are compared in Turkish now, but the questions the
+# model knows are also Turkish, and both moved up together. 0.29 is the middle
+# of what is left. If a Turkish question is ever wrongly refused, this is the
+# number to look at first — and it should be moved on a measurement, not a
+# hunch.
 #
 # Pet-domain questions the records cannot answer — training, breed choice —
-# still get through: 0.394 and 0.426 in English. Measured rather than assumed
-# (scripts/probe_records_only.py): the records-only prompt refuses all of them.
-# That is the difference between the two classes. The model has no opinion
+# still get through: 0.426 in English, 0.338 in Turkish. Measured rather than
+# assumed (scripts/probe_records_only.py): the records-only prompt refuses all
+# of them. That is what separates the two classes. The model has no opinion
 # about this cat's vaccination history, so a strict prompt holds; it does know
 # the capital of France, so nothing in the prompt holds and the gate has to.
 PET_SIM_THRESHOLDS = {
     "en": 0.40,
-    "tr": 0.28,
+    "tr": 0.29,
 }
 
 
