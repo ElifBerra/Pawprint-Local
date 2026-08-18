@@ -26,6 +26,18 @@ APP_NAME = "pawprint-local"
 CHAT_MODEL_ALIAS = "phi-3.5-mini"
 EMBEDDING_MODEL_ALIAS = "qwen3-embedding-0.6b"
 
+# Foundry Local only offers model variants built for execution providers that
+# are registered, and nothing registers them by itself. Until WebGPU was
+# registered the catalogue showed one variant per model — generic-cpu — and it
+# looked as though no GPU build existed.
+#
+# Registration takes seconds: manager.download_and_register_eps(). Run
+# scripts/probe_providers.py to see what this machine can offer.
+#
+# Set to False to force CPU, which is also the fallback when no GPU variant
+# exists for a model.
+PREFER_GPU = True
+
 # --- Chunking ------------------------------------------------------------
 # Words, not characters. Tuned during evaluation (see docs/EVALUATION.md).
 CHUNK_SIZE = 200

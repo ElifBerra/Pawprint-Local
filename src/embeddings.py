@@ -14,6 +14,21 @@ logger = logging.getLogger(__name__)
 BATCH_SIZE = 16
 
 
+def _with_retry(call, what: str):
+    """Run an embedding call, once more if the first attempt is cancelled.
+
+    On the GPU build the very first call after loading fails with "Operation
+    was cancelled" and the next one succeeds. Warm-up covers the normal case;
+    this covers the rest, because losing a user's question to a one-off
+    initialisation error is not acceptable.
+    """
+    try:
+        return call()
+    except Exception as exc:
+        logger.warning("%s failed (%s), retrying once", what, exc)
+        return call()
+
+
 def embed_texts(texts: Sequence[str]) -> np.ndarray:
     """Embed a list of texts. Returns shape (len(texts), dim), float32."""
     if not texts:
@@ -25,7 +40,9 @@ def embed_texts(texts: Sequence[str]) -> np.ndarray:
     for start in range(0, len(texts), BATCH_SIZE):
         batch = list(texts[start:start + BATCH_SIZE])
         logger.debug("Embedding batch %d-%d", start, start + len(batch))
-        response = client.generate_embeddings(batch)
+        response = _with_retry(
+            lambda: client.generate_embeddings(batch), "Batch embedding"
+        )
         # The API returns items in request order, but sort by index to be safe.
         items = sorted(response.data, key=lambda d: d.index)
         vectors.extend(item.embedding for item in items)
@@ -36,7 +53,9 @@ def embed_texts(texts: Sequence[str]) -> np.ndarray:
 def embed_one(text: str) -> np.ndarray:
     """Embed a single text. Returns shape (dim,), float32."""
     client = foundry.get_embedding_client()
-    response = client.generate_embedding(text)
+    response = _with_retry(
+        lambda: client.generate_embedding(text), "Embedding"
+    )
     return np.asarray(response.data[0].embedding, dtype=np.float32)
 
 

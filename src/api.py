@@ -218,10 +218,13 @@ def status(lang: str = config.DEFAULT_LANGUAGE) -> dict:
 
 @app.post("/api/warmup")
 def warmup() -> dict:
-    """Load the models so the first question is not the slow one."""
-    foundry.get_chat_client()
-    foundry.get_embedding_client()
-    return {"ready": True}
+    """Load the models and run one request through each.
+
+    Loading alone leaves the first real question paying for whatever the
+    runtime initialises lazily — measured at 64 seconds against about one for
+    everything after it.
+    """
+    return {"ready": True, "timings": foundry.warm_up()}
 
 
 # --- Pet profile ---------------------------------------------------------

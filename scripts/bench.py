@@ -33,12 +33,16 @@ def main():
                              "interface actually calls")
     parser.add_argument("--model", help="chat model alias to try instead")
     parser.add_argument("--top-k", type=int, help="override the number of chunks")
+    parser.add_argument("--cpu", action="store_true",
+                        help="force the CPU build, to compare against the GPU one")
     args = parser.parse_args()
 
     if args.model:
         config.CHAT_MODEL_ALIAS = args.model
     if args.top_k:
         config.TOP_K = args.top_k
+    if args.cpu:
+        config.PREFER_GPU = False
 
     # The web interface always passes the pet, so a benchmark that leaves it out
     # measures a path nobody uses. --no-pet exists to price the difference.
@@ -63,9 +67,11 @@ def main():
 
     print("Warming up models...")
     warm = time.perf_counter()
-    foundry.get_chat_client()
-    foundry.get_embedding_client()
-    print(f"Warm-up: {time.perf_counter() - warm:.1f}s\n")
+    timings = foundry.warm_up()
+    chat_model = foundry.get_model(config.CHAT_MODEL_ALIAS)
+    print(f"Warm-up: {time.perf_counter() - warm:.1f}s "
+          f"(embedding {timings['embedding']}s, chat {timings['chat']}s)")
+    print(f"Running : {chat_model.id}\n")
 
     latencies = []
     first_tokens = []

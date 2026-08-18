@@ -213,8 +213,12 @@ hangi soruların cevaplanabileceği konusunda kör oluyor.
 | Cevaplanması gerekeni cevapladı | **17/17** |
 | Reddetmesi gerekeni reddetti | **6/6** |
 | Hata | 0 |
-| Medyan gecikme | 16.7s |
-| Kapsam dışı gecikme | 0.6s |
+| Medyan gecikme | 1.2s |
+| İlk kelimeye kadar | 0.4s |
+| Kapsam dışı gecikme | 0.2s |
+
+Gecikme rakamları GPU'lu makinede. CPU'da aynı sorular ~16 saniye sürüyor ve
+başka hiçbir şey değişmiyor (bkz. 4.5).
 
 Karar payı: en düşük cevaplanabilir skor (0.548) ile en yüksek cevaplanamaz
 skor (0.427) arasında **+0.121**.
@@ -297,7 +301,54 @@ Bu bir eksiklik değil, ölçülmüş bir sınır. Çalışmayan bir Türkçe mo
 koymak, kullanıcıya *"cıkçatalar biraz azetli"* gibi bir sağlık tavsiyesi
 göstermek olurdu.
 
-### 4.5 Hız için model küçültme — denendi, reddedildi
+### 4.5 Kayıtsız execution provider — projenin en pahalı gözden kaçırması
+
+`check_env.py` ilk günden beri şunu yazıyordu:
+
+```
+CUDAExecutionProvider    is_registered=False
+WebGpuExecutionProvider  is_registered=False
+```
+
+"GPU yok, CPU'da çalışıyoruz" diye okuduk. Katalog da `phi-3.5-mini` için tek
+varyant gösteriyordu (`generic-cpu`), bu da yorumu doğruluyordu.
+
+Yanlıştı. **Foundry Local yalnızca kayıtlı provider'lara ait varyantları
+gösteriyor.** GPU sürümü yok değildi, görünmüyordu. Kayıt tek çağrı ve iki
+saniye:
+
+```python
+manager.download_and_register_eps()
+```
+
+Makinede NVIDIA kartı varmış.
+
+| Metrik | CPU | GPU | Kat |
+|---|---|---|---|
+| İlk kelimeye kadar | 13.6s | **0.4s** | **34×** |
+| Toplam medyan | 16.5s | **1.2s** | 14× |
+| Doğruluk | 8/8 | 8/8 | değişmedi |
+
+**Ders — ve rahatsız edici olan kısım bu:** altı ayar koşusu boyunca gecikmeyi
+33.3 saniyeden 13.3'e indirdik, yaklaşık 2.5 kat. Gözden kaçırdığımız iki
+satırlık çağrı 14 kat getirdi.
+
+Ayar çalışması boşa gitmedi — chunk küçültme aynı zamanda doğruluğu artırdı ve
+o kazanç donanımdan bağımsız. Ama gecikme tarafındaki emeğin büyük kısmı,
+platformun zaten sunduğu bir yeteneği kullanmadığımız için harcandı.
+
+**Bir platformun etrafında optimizasyon yapmadan önce platformun ne sunduğunu
+kontrol et.** Teşhis çıktısı iki hafta boyunca doğru bilgiyi gösterdi; biz
+yanlış okuduk.
+
+Ek olarak GPU'ya geçince ilk çağrı sorunları çıktı (ilk embedding iptal
+ediliyor, ilk cevap 64 saniye). Sebep modellerin yüklenip hiç
+çalıştırılmamasıydı; `warm_up()` artık her iki modelden birer istek geçiriyor.
+
+CPU yolu korunuyor: `PREFER_GPU = False` ile geri dönülüyor ve yukarıdaki bütün
+CPU ölçümleri o senaryo için geçerli kalıyor.
+
+### 4.6 Hız için model küçültme — denendi, reddedildi
 
 Demo video olarak çekilecekti ve izleyicinin beklediği süre — ilk kelimenin
 ekranda belirmesi — 13.6 saniyeydi. En büyük kaldıraç modeli küçültmekti.

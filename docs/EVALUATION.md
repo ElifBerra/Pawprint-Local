@@ -554,6 +554,97 @@ Model değişmediğine göre gecikme kabul edilmiş bir kısıt. Hafifletmeler:
 
 ---
 
+## Koşu 11 — Kayıtsız execution provider
+
+Projenin en pahalı gözden kaçırması.
+
+`check_env.py` ilk günden beri şunu yazıyordu:
+
+```
+Execution providers (2):
+  name='CUDAExecutionProvider'    is_registered=False
+  name='WebGpuExecutionProvider'  is_registered=False
+```
+
+"GPU yok, CPU'da çalışıyoruz, normal" diye okuduk ve devam ettik. `phi-3.5-mini`
+için katalog tek varyant gösteriyordu — `generic-cpu` — bu da yorumu
+doğruluyordu.
+
+**Yanlıştı.** Foundry Local, kataloğunda yalnızca **kayıtlı** execution
+provider'lara ait varyantları gösteriyor. Kayıt yapılmadığı için GPU sürümü
+görünmüyordu; yoktu değil, görünmüyordu.
+
+Kayıt tek çağrı ve iki saniye sürüyor:
+
+```python
+manager.download_and_register_eps()
+```
+
+Sonrasında katalog değişti:
+
+```
+Phi-3.5-mini-instruct-cuda-gpu:2     ← yeni
+Phi-3.5-mini-instruct-generic-cpu:2  (cached)
+```
+
+Makinede NVIDIA kartı varmış. İki hafta boyunca bilmiyorduk.
+
+### Etki
+
+| Metrik | CPU | GPU | Kat |
+|---|---|---|---|
+| **İlk kelimeye kadar (medyan)** | 13.6s | **0.4s** | **34×** |
+| Toplam medyan | 16.5s | **1.2s** | 14× |
+| Ortalama | 14.7s | 1.0s | 15× |
+| En yavaş | 22.0s | 1.5s | 15× |
+| Hata | 0 | 0 | — |
+| Doğruluk | 8/8 | 8/8 | değişmedi |
+
+### İlk çağrı sorunu
+
+GPU'ya geçince iki yeni belirti çıktı: ilk embedding çağrısı
+`Operation was cancelled` ile patlıyor, ilk cevap 64 saniye sürüyordu —
+sonrakiler bir saniye.
+
+Sebep: modeller yükleniyordu ama **hiç çalıştırılmıyordu.** Çalışma zamanı bir
+şeyleri ilk kullanımda tembel kuruyor ve o bedeli ilk isteği yapan ödüyor.
+
+İki düzeltme:
+
+- `foundry.warm_up()` artık her iki modelden birer istek geçiriyor. Ölçülen
+  ısınma: embedding 1.1s, sohbet 0.4s.
+- `embeddings.py` ilk çağrı iptal edilirse bir kez daha deniyor. Isınma normal
+  durumu kapatıyor; bu da geri kalanı.
+
+Sonuç: 8 soruda 0 hata, ilk soru dahil hepsi 1.5 saniyenin altında.
+
+### Ders
+
+Bu bulgudan sonra önceki altı ayar koşusuna yeniden bakmak gerekiyor. Chunk
+boyutunu 350'den 200'e düşürmek, `top_k`'yı ayarlamak, `max_tokens`'ı kısmak,
+prompt'u kısaltmak — hepsi gerçek kazanç sağladı ve toplamda medyanı 33.3
+saniyeden 13.3'e indirdi. **Yaklaşık 2.5 kat.**
+
+Gözden kaçırdığımız iki satırlık çağrı **14 kat** getirdi.
+
+Ayar çalışması boşa gitmedi: chunk küçültme aynı zamanda **doğruluğu** artırdı
+(kapsam içi skorlar 0.425-0.602'den 0.480-0.629'a çıktı) ve o kazanç
+donanımdan bağımsız. Ama gecikme tarafındaki emeğin büyük kısmı, platformun
+zaten sunduğu bir yeteneği kullanmadığımız için harcandı.
+
+**Ders: bir platformun etrafında optimizasyon yapmadan önce platformun ne
+sunduğunu kontrol et.** Teşhis çıktısı iki hafta boyunca `is_registered=False`
+yazdı; okuduk ve yanlış yorumladık.
+
+### CPU hâlâ destekleniyor
+
+`PREFER_GPU = False` ile CPU'ya dönülüyor, `scripts/bench.py --cpu` ile
+karşılaştırılabiliyor. GPU varyantı olmayan modellerde otomatik olarak CPU'ya
+düşüyor. Yani proje GPU'suz makinelerde de çalışıyor — sadece daha yavaş, ve
+yukarıdaki bütün CPU ölçümleri o senaryo için geçerli.
+
+---
+
 ## Türkçe desteği — ölçüm ve karar
 
 Arayüzün Türkçe olması istendi. Belge koleksiyonu İngilizce. İki ayrı soru

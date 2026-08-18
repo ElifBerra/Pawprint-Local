@@ -65,6 +65,47 @@ def _progress(percent: float) -> None:
     print(f"\r  downloading... {percent:5.1f}%", end="", flush=True)
 
 
+_eps_registered = False
+
+
+def ensure_providers() -> None:
+    """Register the execution providers this machine can use.
+
+    Nothing does this by itself, and until it happens the catalogue lists only
+    the generic-cpu build of every model — a GPU variant may exist and simply
+    be invisible. Registration is quick and idempotent; the packages are
+    cached after the first call.
+    """
+    global _eps_registered
+    if _eps_registered or not config.PREFER_GPU:
+        return
+    _eps_registered = True
+
+    try:
+        result = get_manager().download_and_register_eps()
+        if result.registered_eps:
+            logger.info("Registered execution providers: %s",
+                        ", ".join(result.registered_eps))
+    except Exception as exc:
+        # Not fatal — everything still runs on CPU.
+        logger.warning("Could not register execution providers: %s", exc)
+
+
+def _pick_variant(model):
+    """Prefer a GPU build when one exists for this model."""
+    if not config.PREFER_GPU:
+        return None
+    try:
+        variants = model.variants
+    except Exception:
+        return None
+
+    gpu = next((v for v in variants if "gpu" in (v.id or "").lower()), None)
+    if gpu is None or gpu.id == model.id:
+        return None
+    return gpu
+
+
 def get_model(alias: str, show_progress: bool = True):
     """Download (if needed), load (if needed), and return a model by alias."""
     if alias in _models:
@@ -75,6 +116,8 @@ def get_model(alias: str, show_progress: bool = True):
             return _models[alias]
 
         manager = get_manager()
+        ensure_providers()
+
         model = manager.catalog.get_model(alias)
         if model is None:
             raise ModelNotFoundError(
@@ -82,6 +125,11 @@ def get_model(alias: str, show_progress: bool = True):
                 f"Available aliases: {', '.join(available_aliases())}\n"
                 f"Update src/config.py with one of these."
             )
+
+        variant = _pick_variant(model)
+        if variant is not None:
+            logger.info("Using %s instead of %s", variant.id, model.id)
+            model.select_variant(variant)
 
         if not model.is_cached:
             logger.info("Downloading %s (first run only)", alias)
@@ -118,6 +166,52 @@ def get_embedding_client():
         model = get_model(config.EMBEDDING_MODEL_ALIAS)
         _clients["embedding"] = model.get_embedding_client()
     return _clients["embedding"]
+
+
+def warm_up() -> dict:
+    """Load both models and actually run something through them.
+
+    Loading is not enough. On the GPU build the first embedding call failed
+    outright with "Operation was cancelled" and the first answer took 64
+    seconds, while everything after that took about one. Whatever the runtime
+    sets up on first use, it sets up lazily — so the first request pays for it,
+    and that request should be ours rather than the user's.
+
+    Failures are swallowed: a warm-up that does not work is not a reason to
+    refuse to start.
+    """
+    import time
+
+    started = time.perf_counter()
+    report = {"embedding": None, "chat": None}
+
+    try:
+        embedding = get_embedding_client()
+        mark = time.perf_counter()
+        embedding.generate_embedding("warm up")
+        report["embedding"] = round(time.perf_counter() - mark, 1)
+    except Exception as exc:
+        logger.warning("Embedding warm-up failed: %s", exc)
+        try:                      # the first call often fails, the second does not
+            get_embedding_client().generate_embedding("warm up")
+            report["embedding"] = round(time.perf_counter() - started, 1)
+        except Exception as second:
+            logger.warning("Embedding warm-up failed again: %s", second)
+
+    try:
+        chat = get_chat_client()
+        mark = time.perf_counter()
+        chat.complete_chat([
+            {"role": "system", "content": "Reply with one word."},
+            {"role": "user", "content": "Ready?"},
+        ])
+        report["chat"] = round(time.perf_counter() - mark, 1)
+    except Exception as exc:
+        logger.warning("Chat warm-up failed: %s", exc)
+
+    report["total"] = round(time.perf_counter() - started, 1)
+    logger.info("Warm-up: %s", report)
+    return report
 
 
 def unload_all() -> None:

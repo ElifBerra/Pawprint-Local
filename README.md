@@ -237,12 +237,24 @@ harder test than an obviously unrelated one.
 | Retrieval accuracy (correct document in top 3) | 17/17 |
 | Answered when it should | 17/17 |
 | Declined when it should | 6/6 |
-| Median latency | 16.6s |
-| Out-of-scope latency | 0.6s |
+| Median latency | 1.2s |
+| Time to first word | 0.4s |
+| Out-of-scope latency | 0.2s |
 
-Tuning took the median from 33.3s to 13.3s on the development set with no loss
-of accuracy, by changing chunking and retrieval settings only. Adding the
-animal's records to the prompt then cost 4.5x, and that was recovered in full.
+**Latency depends on one setup step.** Foundry Local lists only the model
+variants built for execution providers that are *registered*, and nothing
+registers them by itself. Until we called `download_and_register_eps()` the
+catalogue showed a single CPU build of every model and we assumed that was all
+there was. Registering takes two seconds and moved the median from 16.5s to
+1.2s on this machine. `python -m scripts.probe_providers` reports what yours
+can offer.
+
+Without a GPU the same questions take about 16 seconds and everything else
+behaves identically.
+
+Tuning before that took the CPU median from 33.3s to 13.3s by changing chunking
+and retrieval settings only — and improved retrieval accuracy at the same time,
+which is a gain the hardware does not give back.
 
 **Independent check.** Three products publish their own feeding tables. The
 calculated portion lands inside the manufacturer's range in all three:

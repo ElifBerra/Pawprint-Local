@@ -58,7 +58,50 @@ bu traceback izleyicinin gördüğü ilk şey olmasın.
 
 ---
 
-## Cevaplar bazen 80-180 saniye sürüyor
+## Cevaplar yavaş — önce bunu kontrol edin
+
+Foundry Local, kataloğunda **yalnızca kayıtlı execution provider'lara ait**
+model varyantlarını gösterir. Kayıt otomatik yapılmaz. Kayıt yokken katalog her
+model için tek bir CPU sürümü gösterir ve GPU sürümü varmış gibi görünmez.
+
+```powershell
+python -m scripts.probe_providers
+```
+
+`is_registered=False` görüyorsanız ve makinede GPU varsa:
+
+```powershell
+python -m scripts.probe_providers --register
+```
+
+İki saniye sürer. Bu makinede medyan gecikmeyi **16.5 saniyeden 1.2 saniyeye**
+indirdi. Uygulama kayıt sonrası GPU varyantını kendisi seçiyor
+(`config.PREFER_GPU`).
+
+CPU'ya dönmek için `PREFER_GPU = False`, karşılaştırmak için
+`python -m scripts.bench --stream --cpu`.
+
+---
+
+## İlk soru çok yavaş ya da hata veriyor
+
+Modeller yüklenip hiç çalıştırılmazsa, çalışma zamanının tembel kurduğu şeylerin
+bedelini ilk istek öder. Ölçüldü: ilk embedding çağrısı
+`Operation was cancelled` ile patlıyor, ilk cevap 64 saniye sürüyor, sonrakiler
+bir saniye.
+
+`foundry.warm_up()` bunu kapatıyor ve sunucu açılışında çağrılıyor. Elle
+tetiklemek için:
+
+```powershell
+curl -X POST http://127.0.0.1:8000/api/warmup
+```
+
+Demo öncesi bunu bir kez çalıştırın.
+
+---
+
+## Cevaplar bazen 80-180 saniye sürüyor (CPU'da)
 
 **Belirti:** Aynı soru bazen 15 saniyede, bazen 3 dakikada cevaplanıyor.
 
