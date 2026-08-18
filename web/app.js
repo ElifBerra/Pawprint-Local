@@ -910,7 +910,20 @@ async function askQuestion(event) {
       for (const line of lines) {
         if (!line.trim()) continue;
         const event = JSON.parse(line);
-        if (event.type === "token") {
+        if (event.type === "retrieved") {
+          // Retrieval is done long before the first word arrives. Show what
+          // was found straight away, so the wait is filled by the system
+          // visibly working rather than an empty bubble.
+          bubble.innerHTML =
+            `<span class="typing"><i></i><i></i><i></i></span>` +
+            metaHtml({
+              sources: event.sources,
+              used_pet_record: event.used_pet_record,
+              retrieved: event.retrieved,
+              latency_s: null,
+            });
+          $("#chat").scrollTop = $("#chat").scrollHeight;
+        } else if (event.type === "token") {
           answer += event.text;
           bubble.innerHTML = escapeHtml(answer);
           $("#chat").scrollTop = $("#chat").scrollHeight;
@@ -943,7 +956,8 @@ function metaHtml(done) {
     tags.push(`<span class="tag">${T("ask.no_match")}</span>`);
   }
 
-  let html = `<div class="meta">${tags.join("")}<span>${done.latency_s}s</span></div>`;
+  let html = `<div class="meta">${tags.join("")}${
+    done.latency_s === null ? "" : `<span>${done.latency_s}s</span>`}</div>`;
 
   if (done.retrieved && done.retrieved.length) {
     html += `<details class="passages"><summary>${T("ask.passages")}</summary>` +

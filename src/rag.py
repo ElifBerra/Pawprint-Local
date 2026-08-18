@@ -52,7 +52,10 @@ def _prepare(
     question is out of scope and the model should not be called at all.
     """
     results = retrieve.get_top_chunks(
-        question, k=config.TOP_K if k is None else k, chunks=chunks
+        question,
+        k=config.TOP_K if k is None else k,
+        chunks=chunks,
+        context_terms=pet_context.search_terms(pet),
     )
 
     use_pet = pet is not None and pet_context.has_useful_records(pet)
@@ -241,6 +244,7 @@ def answer_stream(
     threshold: Optional[float] = None,
     pet: Optional[Pet] = None,
     lang: str = config.DEFAULT_LANGUAGE,
+    on_retrieved=None,
 ) -> Generator[str, None, Answer]:
     """Same as answer(), but yields the text as it is generated.
 
@@ -262,6 +266,14 @@ def answer_stream(
     results, system_prompt, used_pet = _prepare(
         question, chunks, k, threshold, pet, lang
     )
+
+    # Retrieval finishes in well under a second; generation takes fifteen, and
+    # about eighty per cent of that is the model reading the prompt before it
+    # writes anything. Handing the passages over now lets the interface show
+    # what was found while the model is still thinking, instead of a blank
+    # panel — and what it shows is the retrieval step doing its job.
+    if on_retrieved is not None:
+        on_retrieved(results, used_pet)
 
     if system_prompt is None:
         yield config.fallback(lang)

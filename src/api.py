@@ -603,14 +603,35 @@ def ask(body: AskIn):
     answer_lang = config.answer_language(body.lang)
 
     def events():
+        pending = []
+
+        def on_retrieved(results, used_pet):
+            pending.append(json.dumps({
+                "type": "retrieved",
+                "used_pet_record": used_pet,
+                "sources": rag.unique_sources(results),
+                "retrieved": [
+                    {
+                        "source": r.chunk.source,
+                        "chunk_index": r.chunk.chunk_index,
+                        "score": round(r.score, 3),
+                        "content": r.chunk.content,
+                    }
+                    for r in results
+                ],
+            }) + "\n")
+
         generator = rag.answer_stream(
             body.question,
             k=body.top_k,
             threshold=body.threshold,
             pet=pet,
             lang=answer_lang,
+            on_retrieved=on_retrieved,
         )
         while True:
+            if pending:
+                yield pending.pop(0)
             try:
                 piece = next(generator)
                 yield json.dumps({"type": "token", "text": piece}) + "\n"

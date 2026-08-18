@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from . import insights, pets_db
-from .models import Pet
+from .models import Pet  # noqa: F401  (used in annotations below)
 
 # The prompt grows with every warning, and prompt length is the dominant cost
 # on CPU. Three is enough to surface a problem without turning the context into
@@ -59,6 +59,23 @@ def relevance(pet: Pet, query_vector) -> float:
     a = embeddings.normalize(vector)
     b = embeddings.normalize(query_vector)
     return float(a @ b)
+
+
+def search_terms(pet: Optional[Pet]) -> Optional[str]:
+    """The few words a user leaves out because they are obvious to them.
+
+    Folded into the text that gets embedded for retrieval, not into the prompt.
+    Species carries most of the signal; life stage matters because the document
+    collection treats kittens and adults differently.
+    """
+    if pet is None:
+        return None
+
+    parts = [pet.species]
+    months = pet.age_months
+    if months is not None and months < 12:
+        parts.append("kitten" if pet.species == "cat" else "puppy")
+    return " ".join(parts)
 
 
 def topics_text(pet: Pet) -> str:

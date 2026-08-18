@@ -41,10 +41,27 @@ def embed_query(query: str) -> np.ndarray:
     return _query_cache[key]
 
 
+def expand(query: str, terms: Optional[str]) -> str:
+    """Add the animal's own context to a question before embedding it.
+
+    People leave out what is obvious to them. "Can I give chocolate?" scores
+    0.446 against the collection and falls below the threshold; the same
+    question written out as "can I give my cat chocolate" scores 0.523. The
+    missing signal is the species — which the profile already knows.
+
+    This is completing the question, not rewriting it. The user is asking
+    about their animal; the prompt still receives what they actually typed.
+    """
+    if not terms:
+        return query
+    return f"{query.strip()} ({terms})"
+
+
 def get_top_chunks(
     query: str,
     k: int = config.TOP_K,
     chunks: Optional[Sequence[Chunk]] = None,
+    context_terms: Optional[str] = None,
 ) -> List[Retrieved]:
     """Return the k best-matching chunks for a query.
 
@@ -53,9 +70,13 @@ def get_top_chunks(
         k: How many chunks to return.
         chunks: Optional pre-loaded chunks. When omitted they are read from
             the database. Passing them in keeps the tests free of I/O.
+        context_terms: Words describing the animal, folded into the text that
+            is embedded. Does not change the question the model is shown.
     """
     if not query or not query.strip():
         return []
+
+    query = expand(query, context_terms)
 
     if chunks is None:
         from . import db  # imported lazily so tests can skip the database

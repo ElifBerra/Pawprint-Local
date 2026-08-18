@@ -31,7 +31,14 @@ def main():
     parser.add_argument("--stream", action="store_true",
                         help="use the streaming path, which is what the web "
                              "interface actually calls")
+    parser.add_argument("--model", help="chat model alias to try instead")
+    parser.add_argument("--top-k", type=int, help="override the number of chunks")
     args = parser.parse_args()
+
+    if args.model:
+        config.CHAT_MODEL_ALIAS = args.model
+    if args.top_k:
+        config.TOP_K = args.top_k
 
     # The web interface always passes the pet, so a benchmark that leaves it out
     # measures a path nobody uses. --no-pet exists to price the difference.
@@ -61,19 +68,26 @@ def main():
     print(f"Warm-up: {time.perf_counter() - warm:.1f}s\n")
 
     latencies = []
+    first_tokens = []
     fallbacks = 0
 
     errors = 0
 
     for question in QUESTIONS:
+        first_token = None
         try:
             if args.stream:
-                # Consume it the way the browser does, so the measurement
-                # includes whatever the streaming path costs.
+                # Consume it the way the browser does, and time the first
+                # piece separately. On a recorded demo that is the number that
+                # matters: total time is hidden by the text streaming, but dead
+                # air before the first word is not.
+                started = time.perf_counter()
                 generator = rag.answer_stream(question, pet=pet)
                 while True:
                     try:
                         next(generator)
+                        if first_token is None:
+                            first_token = time.perf_counter() - started
                     except StopIteration as stop:
                         result = stop.value
                         break
@@ -85,6 +99,8 @@ def main():
             continue
 
         latencies.append(result.latency_s)
+        if first_token is not None:
+            first_tokens.append(first_token)
         if result.used_fallback:
             fallbacks += 1
 
@@ -105,6 +121,11 @@ def main():
         print(f"Mean        : {statistics.mean(latencies):.1f}s")
         print(f"Median      : {statistics.median(latencies):.1f}s")
         print(f"Min / Max   : {min(latencies):.1f}s / {max(latencies):.1f}s")
+    if first_tokens:
+        print()
+        print("Time to first word — what a viewer actually waits for:")
+        print(f"  Median    : {statistics.median(first_tokens):.1f}s")
+        print(f"  Worst     : {max(first_tokens):.1f}s")
 
     foundry.unload_all()
 

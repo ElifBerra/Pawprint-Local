@@ -393,6 +393,117 @@ için ret talimatı veriyor. İkincisi tek başına yetmiyordu.
 
 ---
 
+## Koşu 8 — Kısa sorularda retrieval kaybı
+
+Arayüzde gerçek kullanımda ortaya çıktı. Kullanıcı **"can i give chocolate"**
+yazdı ve sistem reddetti — oysa çikolata belgelerde var ve değerlendirme
+setinde aynı konu 0.615 ile geçiyordu.
+
+Fark, değerlendirme setindeki sorunun **"Can I give my dog chocolate?"** olması.
+İki kelime eksikti.
+
+| Sorgu | Skor |
+|---|---|
+| `Can I give my dog chocolate?` | 0.615 |
+| `is chocolate bad for cats` | 0.598 |
+| `can i give my cat chocolate` | 0.523 |
+| `can i give chocolate` | **0.446** — eşiğin altında |
+| `chocolate` | 0.378 |
+
+**Bulgu: eşik düzgün kurulmuş sorularla ayarlandı, gündelik yazımda kırılgan.**
+Değerlendirme setini biz yazdık ve tam cümleler kurduk. Kullanıcı kısa yazıyor
+ve kendisi için apaçık olanı — hangi hayvandan bahsettiğini — atlıyor.
+
+### Denenen ve reddedilen: eşiği düşürmek
+
+İlk çözüm eşiği 0.48'den 0.44'e çekmekti. Reddedildi, çünkü karar payını
+yok ediyor:
+
+| | Kapsam içi en düşük | Kapsam dışı en yüksek | Pay |
+|---|---|---|---|
+| Eşik 0.48 | 0.548 | 0.427 | +0.121 |
+| Eşik 0.44 | 0.446 | 0.427 | **+0.019** |
+
+0.019'luk bir payla yeni bir kapsam dışı soru rahatlıkla sızar.
+
+### Uygulanan: sorguyu hayvanın bağlamıyla tamamlamak
+
+Türü zaten biliyoruz — profilde duruyor. Kullanıcı "çikolata verebilir miyim?"
+derken kendi hayvanını kastediyor. Tür (ve 12 aydan küçükse "kitten"/"puppy")
+**embedding'e giden metne** ekleniyor. Modele giden soru değişmiyor.
+
+| Soru | Önce | Sonra | Fark |
+|---|---|---|---|
+| `can i give chocolate` | 0.446 | **0.537** | +0.091 |
+| `when are the shots due` | 0.441 | **0.549** | +0.109 |
+| `chocolate` | 0.378 | 0.467 | +0.089 |
+| `is this urgent` | 0.482 | 0.522 | +0.039 |
+| `Can I give my dog chocolate?` | 0.615 | 0.604 | −0.011 |
+| `is chocolate bad for cats` | 0.598 | 0.550 | −0.048 |
+| `how much does neutering cost` | 0.409 | 0.460 | +0.050 |
+| `who won the world cup in 1998` | 0.215 | 0.355 | +0.140 |
+
+**İki meşru soru kurtarıldı, iki kapsam dışı soru altta kaldı.** Yeni pay:
+en düşük kapsam içi 0.537, en yüksek kapsam dışı 0.460 → **+0.077**. Eşik
+düşürme seçeneğinin dört katı.
+
+Soru zaten türü içeriyorsa skor hafif düşüyor (−0.011, −0.048) — tekrar eklemek
+sinyali seyreltiyor. İkisi de rahat eşiğin üstünde kaldığı için kabul edildi.
+
+**Dürüst not:** en çok yükselen sorgu, tamamen alakasız olan Dünya Kupası oldu
+(+0.140). Eşiğin epey altında ama boşluk 0.265'ten 0.125'e indi. Zenginleştirme
+her şeyi biraz yukarı itiyor, sadece doğru olanları değil. Daha agresif bir
+zenginleştirme (ırk, kilo, mama adı eklemek) bu payı yiyip bitirirdi.
+
+### Doğrulama
+
+23 soruluk set değişiklikten sonra tekrar çalıştırıldı:
+
+| Metrik | Sonuç |
+|---|---|
+| Retrieval isabeti | 17/17 |
+| Cevaplanması gerekeni cevapladı | 17/17 |
+| Reddetmesi gerekeni reddetti | 6/6 |
+| Hata | 0 |
+| Medyan gecikme | 14.0s |
+| Karar payı | +0.121 |
+
+Değerlendirme seti `pet` göndermiyor, yani zenginleştirme orada devrede değil —
+sonucun değişmemesi beklenen ve doğrulanan sonuç.
+
+---
+
+## Koşu 9 — Videoda görünen gecikme
+
+Demo video olarak çekilecek. O yüzden ölçtüğümüz metrik yanlıştı: izleyicinin
+beklediği şey toplam süre değil, **ilk kelimenin ekranda belirmesi.** Metin
+akmaya başladıktan sonra süre hissedilmiyor; başlamadan önceki boşluk
+hissediliyor.
+
+| Metrik | Değer |
+|---|---|
+| Toplam medyan | 16.5s |
+| **İlk kelimeye kadar medyan** | **13.6s** |
+| İlk kelimeye kadar en kötü | 17.6s |
+
+**Sürenin %82'si ilk kelimeden önce.** Üretim sadece ~3 saniye; geri kalanı
+modelin prompt'u okuması (prefill). Streaming bu yüzden beklenen faydayı
+vermiyordu — akacak metin henüz yok.
+
+### Uygulanan: boşluğu retrieval sonucuyla doldurmak
+
+Retrieval yarım saniyede bitiyor, üretim 13 saniye sonra başlıyor. Arada
+elimizde çekilen pasajlar duruyordu ama gösterilmiyordu.
+
+`answer_stream` artık `on_retrieved` geri çağrısı alıyor; API bunu ayrı bir
+NDJSON olayı olarak yolluyor ve arayüz kaynakları **hemen** gösteriyor. Cevap
+altına akıyor.
+
+Boşluk aynı uzunlukta ama artık boş değil, ve doldurduğu şey projenin anlattığı
+şeyin ta kendisi: önce arama, sonra üretim.
+
+---
+
 ## Türkçe desteği — ölçüm ve karar
 
 Arayüzün Türkçe olması istendi. Belge koleksiyonu İngilizce. İki ayrı soru
