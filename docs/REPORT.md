@@ -297,7 +297,36 @@ Bu bir eksiklik değil, ölçülmüş bir sınır. Çalışmayan bir Türkçe mo
 koymak, kullanıcıya *"cıkçatalar biraz azetli"* gibi bir sağlık tavsiyesi
 göstermek olurdu.
 
-### 4.5 Testler
+### 4.5 Hız için model küçültme — denendi, reddedildi
+
+Demo video olarak çekilecekti ve izleyicinin beklediği süre — ilk kelimenin
+ekranda belirmesi — 13.6 saniyeydi. En büyük kaldıraç modeli küçültmekti.
+
+`qwen2.5-1.5b` gerçekten hızlı: ilk kelime **5.5 saniye**, medyan toplam
+7.2 saniye. Yaklaşık 2.3 kat.
+
+Ve iki cevap kararı verdi:
+
+> **"Can I give my dog chocolate?"**
+> *"**Yes, you can give your dog chocolate.** However, dark chocolate has more
+> theobromine than milk chocolate..."*
+
+Doğru pasajları çekmişti — kaynaklar listede duruyordu. Doğru bağlamı aldı ve
+tersini söyledi.
+
+> **"What is the capital of France?"** (skor 0.363, eşiğin altında)
+> *"Paris."*
+
+`phi-3.5-mini` aynı soruyu aynı promptla reddediyor.
+
+**2.3 kat hız, güvenlik karşılığında satın alınamaz.** `phi-3.5-mini` kaldı.
+
+Bu ölçümün ikinci bir faydası oldu: projenin tasarım ilkesini doğruladı. Model
+değiştiğinde kural motoru, eşikler, enerji hesapları ve aşı takvimi **hiç
+değişmedi** — çünkü hiçbiri modele bağlı değil. Bozulan tek şey modelin kendi
+cevaplarıydı. Önemli işleri modele yaptırmamak, tam olarak bunun için.
+
+### 4.6 Testler
 
 87 birim testi, model yüklemeden 2.7 saniyede çalışıyor. En yoğun olduğu yer
 kural motoru — çünkü orada geliştirme sırasında **dört ayrı boşluk** tesadüfen

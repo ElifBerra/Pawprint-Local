@@ -504,6 +504,56 @@ Boşluk aynı uzunlukta ama artık boş değil, ve doldurduğu şey projenin anl
 
 ---
 
+## Koşu 10 — Daha hızlı model denendi ve reddedildi
+
+İlk kelime 13.6 saniyede geliyordu ve demo video olarak çekilecekti. En büyük
+kaldıraç modeli küçültmekti: `phi-3.5-mini` 3.8 milyar parametre,
+`qwen2.5-1.5b` 1.5 milyar.
+
+Hız kazancı gerçek:
+
+| Metrik | phi-3.5-mini | qwen2.5-1.5b |
+|---|---|---|
+| Medyan toplam | 16.5s | **7.2s** |
+| İlk kelimeye kadar | 13.6s | **5.5s** |
+| En yavaş | 22.0s | 10.7s |
+
+**Ve kabul edilemez.** İki cevap:
+
+> **"Can I give my dog chocolate?"**
+> *"**Yes, you can give your dog chocolate.** However, dark chocolate has more
+> theobromine than milk chocolate..."*
+
+> **"What is the capital of France?"** (skor 0.363, eşiğin altında)
+> *"Paris."*
+
+Birincisi zararlı. Bir evcil hayvan sağlığı uygulamasının köpeğe çikolata
+verilebileceğini söylemesi, projenin engellemek için var olduğu şeyin ta
+kendisi. Üstelik doğru pasajları çekmişti — `nutrition-and-feeding.md` ve
+`emergency-signs.md` kaynak olarak listelendi. Model doğru bağlamı aldı ve
+tersini söyledi.
+
+İkincisi kapsam dışı korumasını deliyor. `phi-3.5-mini` aynı soruyu aynı
+promptla doğru şekilde reddediyor; bu model talimatı hiç dinlemiyor.
+
+**Karar: `phi-3.5-mini` kalıyor.** 2.3 kat hız, güvenlik karşılığında satın
+alınamaz.
+
+Bu ölçüm projenin genel tasarım ilkesini de doğruluyor: modele önemli işleri
+yaptırmamak doğru karardı. Kural motoru ve eşikler model değişse de aynı
+davranıyor; model değiştiğinde bozulan tek şey modelin kendi cevapları oldu.
+
+### Hız için kalan yollar
+
+Model değişmediğine göre gecikme kabul edilmiş bir kısıt. Hafifletmeler:
+
+- **Retrieval sonucunu hemen göstermek** (uygulandı) — bekleme aynı uzunlukta
+  ama boş değil
+- **Demo öncesi ısıtma sorusu** — ilk sorgu modeli belleğe alıyor
+- **Makineyi boşaltmak** — ekran kaydı ve görüntülü görüşme süreyi katlıyor
+
+---
+
 ## Türkçe desteği — ölçüm ve karar
 
 Arayüzün Türkçe olması istendi. Belge koleksiyonu İngilizce. İki ayrı soru
