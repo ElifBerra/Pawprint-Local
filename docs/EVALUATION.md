@@ -708,6 +708,83 @@ gelmiyor.** Bu cevap prova olmasa videoya girecekti.
 
 ---
 
+## Koşu 13 — Hiç ölçülmemiş kapı
+
+Demo kaydında yakalandı:
+
+| Soru | Sonuç |
+|---|---|
+| `selam, kedim kaç aylık` | *"I don't have that information in my documents."* |
+| `how old is my cat` | *"10 months old"* — 0.4s |
+
+Aynı kayıt, aynı bilgi, iki dil, iki sonuç.
+
+### Önce yanlış teşhis
+
+İlk tahminim: kayıt kapısının karşılaştırdığı konu metni İngilizce, Türkçe soru
+çapraz dil cezası ödüyor. Metni iki dilde yazdım. Sonra ikinci tahmin: "cins" ve
+"cinsiyet" kelimeleri kapsam dışı soruları yukarı çekiyor, onları çıkardım.
+
+**İkisi de ölçümde çürüdü.** Türkçe marj -0.011'den **-0.028**'e düştü;
+*"köpeğime oturmayı nasıl öğretirim"* 0.311'den 0.338'e **yükseldi**. Metni
+kısaltmak kalan kelimelerin ağırlığını artırmış.
+
+### Asıl bulgu
+
+`tests/run_eval.py` içinde `pet` kelimesi hiç geçmiyor. **23 soruluk
+değerlendirme hayvansız çalışıyor — ikinci kapıyı hiç test etmemiş.** "6/6
+reddetti" rakamı yalnızca belge kapısının. Bu kapı elle ayarlandı ve haftalarca
+ölçülmedi.
+
+`scripts/probe_pet_gate.py` ile ilk kez ölçüldü. Türkçede güvenli eşik yoktu
+(cevaplanabilir min 0.310, kapsam dışı max 0.338), İngilizcede marj +0.015'ti.
+
+### Doğru soru
+
+Eşiğin nerede olacağı sorusunun cevabı yoktu; o hâlde soru şuydu: **eşik
+yanıldığında ne oluyor?** Kapıdan sızanlar `SYSTEM_PROMPT_RECORDS_ONLY`'ye
+düşüyor. `scripts/probe_records_only.py` kapıyı atlayıp o soruları doğrudan o
+prompt'a verdi:
+
+| Soru | Sonuç |
+|---|---|
+| how do I train my puppy to sit | REFUSED |
+| which dog breed is best for an apartment | REFUSED |
+| köpeğime oturmayı nasıl öğretirim | REFUSED |
+| 1998 dünya kupasını kim kazandı | REFUSED |
+| **fransa'nın başkenti neresi** | **ANSWERED: "Paris fransa'nın başkentinerdir."** |
+
+İki sınıf birbirinden ayrıldı. Modelin bu kedinin aşı geçmişi hakkında bir
+görüşü yok, o yüzden katı prompt tutuyor. Fransa'nın başkentini **biliyor**,
+orada hiçbir prompt tutmuyor ve kapı tek savunma.
+
+Ve o kapı 0.004 farkla duruyordu:
+
+| | skor | eski eşik | fark |
+|---|---|---|---|
+| capital of France | 0.316 | 0.32 | 0.004 |
+| fransa'nın başkenti | 0.192 | 0.20 | 0.008 |
+
+### Karar
+
+Eşikler tehlikeli sınıfın **yanına** değil **üstüne** taşındı:
+
+| | gerçek soru geçen | tehlikeli sınıf | marj |
+|---|---|---|---|
+| EN 0.32 → **0.40** | 6/6 | durduruldu | 0.004 → **+0.084** |
+| TR 0.20 → **0.28** | 7/7 | durduruldu | 0.008 → **+0.088** |
+
+Alan içi ama kayıtlarda olmayan sorular (0.394, 0.426) hâlâ geçiyor — bilerek.
+Prompt onları reddediyor ve bu ölçüldü.
+
+**Ders: ölçmediğin şeyi ayarlamış sayılmazsın.** Bu kapı iki ayrı hatayı
+önlemek için kuruldu, doğru çalıştığı varsayıldı, ve değerlendirme setinin onu
+hiç görmediği ancak bir demo kaydında Türkçe bir sorunun reddedilmesiyle ortaya
+çıktı. İki tahmin, iki ölçüm, ikisi de yanlış çıktı; doğru cevabı üçüncü ölçüm
+verdi.
+
+---
+
 ## Türkçe desteği — ölçüm ve karar
 
 Arayüzün Türkçe olması istendi. Belge koleksiyonu İngilizce. İki ayrı soru

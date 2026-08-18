@@ -85,7 +85,9 @@ def _prepare(
         # check the question is even about them — otherwise the model gets
         # called for something neither source covers and answers from memory.
         if not relevant:
-            score = pet_context.relevance(pet, retrieve.embed_query(question))
+            score = pet_context.relevance(
+                pet, retrieve.embed_query(question), lang
+            )
             logger.info("Records relevance %.3f (limit %.2f)",
                         score, config.pet_threshold(lang))
 

@@ -96,3 +96,30 @@ def test_topics_do_not_leak_values(cat):
     text = pet_context.topics_text(cat)
     assert "weight" in text
     assert "4.2" not in text        # subjects, not numbers — see topics_text
+
+
+def test_topics_are_written_in_the_question_s_language(cat):
+    english = pet_context.topics_text(cat, "en")
+    turkish = pet_context.topics_text(cat, "tr")
+    assert english != turkish
+    assert "kaç aylık" in turkish   # the demo question that was refused
+    assert "how old" in english
+    assert "kedi" in turkish        # species too, not just the subjects
+
+
+def test_the_breed_is_kept_out_of_the_topics(dog):
+    # It raised "which dog breed is best for an apartment?" and answers nothing.
+    assert dog.breed
+    assert dog.breed not in pet_context.topics_text(dog)
+    assert "breed" not in pet_context.topics_text(dog)
+
+
+def test_an_unknown_language_falls_back_rather_than_failing(cat):
+    assert pet_context.topics_text(cat, "de") == pet_context.topics_text(cat, "en")
+
+
+def test_both_languages_cover_the_same_subjects(cat):
+    # Not a translation check — a check that neither list quietly lost a
+    # subject the other has, which would make one language answer questions
+    # the other refuses.
+    assert len(pet_context._TOPICS["en"]) == len(pet_context._TOPICS["tr"])

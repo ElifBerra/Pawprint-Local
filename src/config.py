@@ -98,9 +98,38 @@ def threshold(lang: str = DEFAULT_LANGUAGE) -> float:
 # So the question is measured against what the records are about as well. Set
 # lower than the document threshold because it compares a question to a list of
 # subjects rather than to prose.
+#
+# These were guessed, and stayed guessed for weeks because run_eval.py runs
+# without an animal — the 6/6 refusal figure only ever tested the document
+# gate. scripts/probe_pet_gate.py measures this one, and the first run was not
+# reassuring:
+#
+#                        score   old threshold   margin
+#   capital of France     0.316       0.32        0.004
+#   fransa'nın başkenti   0.192       0.20        0.008
+#
+# Both stopped, both by almost nothing. And the model does answer them when
+# they get through: forced past the gate, it replied "Paris fransa'nın
+# başkentinerdir" — broken Turkish, right answer, no records involved.
+#
+# Raised so that the gap sits above that class rather than beside it:
+#
+#                        EN                      TR
+#   lowest real question 0.441                   0.310
+#   threshold            0.40                    0.28
+#   highest of the       0.316 (France)          0.192 (France)
+#     dangerous class
+#   margin               +0.084                  +0.088
+#
+# Pet-domain questions the records cannot answer — training, breed choice —
+# still get through: 0.394 and 0.426 in English. Measured rather than assumed
+# (scripts/probe_records_only.py): the records-only prompt refuses all of them.
+# That is the difference between the two classes. The model has no opinion
+# about this cat's vaccination history, so a strict prompt holds; it does know
+# the capital of France, so nothing in the prompt holds and the gate has to.
 PET_SIM_THRESHOLDS = {
-    "en": 0.32,
-    "tr": 0.20,
+    "en": 0.40,
+    "tr": 0.28,
 }
 
 

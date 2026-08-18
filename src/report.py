@@ -211,17 +211,32 @@ def _lines(data: dict) -> List[str]:
         add(f"## {t['digestion']}")
         add(f"{t['stool_normal']}|%{data['digestion']['stool_normal_pct']}")
 
+    # Title and detail together. The Insights page shows the title above the
+    # detail, so a detail that leans on it reads fine there — on the report,
+    # which printed the detail alone, the vaccine entries came out as
+    # "Due 30 August 2026, in 12 days." with no mention of which vaccine.
     if data["assessment"]:
         add(f"## {t['assessment']}")
         for item in data["assessment"]:
-            add(f">{item['detail']}")
+            add(f">{_sentence(item)}")
 
     if data["recommendations"]:
         add(f"## {t['recommendations']}")
         for index, item in enumerate(data["recommendations"], 1):
-            add(f"-{index}. {item['detail']}")
+            add(f"-{index}. {_sentence(item)}")
 
     return out
+
+
+def _sentence(item: dict) -> str:
+    """One self-contained line: what the finding is, then why."""
+    title = (item.get("title") or "").strip()
+    detail = (item.get("detail") or "").strip()
+    if not title:
+        return detail
+    if not detail:
+        return title
+    return f"{title} — {detail}"
 
 
 # ReportLab's built-in Helvetica uses WinAnsi encoding, which has no ş, ı, ğ or

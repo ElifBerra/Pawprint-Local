@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from . import insights, pets_db
+from . import config, insights, pets_db
 from .models import Pet  # noqa: F401  (used in annotations below)
 
 # The prompt grows with every warning, and prompt length is the dominant cost
@@ -32,7 +32,7 @@ def has_useful_records(pet: Pet) -> bool:
 _relevance_cache: dict = {}
 
 
-def relevance(pet: Pet, query_vector) -> float:
+def relevance(pet: Pet, query_vector, lang: str = "en") -> float:
     """How close a question is to what the records are actually about.
 
     The document threshold has no say here, so without this a question the
@@ -44,15 +44,23 @@ def relevance(pet: Pet, query_vector) -> float:
     The fix is the mechanism the whole project already runs on. Embed what the
     records are about, measure the angle, and if the question is nowhere near
     them, do not call the model at all.
+
+    Compared in the language of the question. The document collection is
+    English and cannot be anything else, so questions about the documents pay
+    a cross-language penalty that the threshold accounts for. The records are
+    not a document — they are a list of subjects this module writes itself —
+    so there is no reason to make a Turkish question match English words when
+    it could match Turkish ones.
     """
     from . import embeddings
 
-    text = topics_text(pet)
+    text = topics_text(pet, lang)
     if not text:
         return 0.0
 
     if text not in _relevance_cache:
-        _relevance_cache.clear()          # one pet, one entry
+        if len(_relevance_cache) >= len(config.LANGUAGES):
+            _relevance_cache.clear()      # one pet, one entry per language
         _relevance_cache[text] = embeddings.embed_one(text)
 
     vector = _relevance_cache[text]
@@ -78,26 +86,63 @@ def search_terms(pet: Optional[Pet]) -> Optional[str]:
     return " ".join(parts)
 
 
-def topics_text(pet: Pet) -> str:
+# Only subjects the records actually hold a value for.
+#
+# "breed" and "sex" were in here briefly and had to come out. They are fields
+# on the profile, nobody asks about them, and they pulled "which dog breed is
+# best for an apartment?" from below the threshold to 0.425 — an out-of-scope
+# question rising because of a subject that answers nothing. A word earns its
+# place here by letting a real question through, not by appearing in the data.
+_TOPICS = {
+    "en": [
+        "body weight, how heavy, weight trend, gaining or losing",
+        "target weight, ideal weight",
+        "age, how old, birth date",
+        "food, brand, daily amount in grams, portion and calories",
+        "protein and fat intake",
+        "stool quality and digestion",
+        "vaccinations and their due dates",
+        "meals per day",
+    ],
+    "tr": [
+        "kilo, kaç kilo, ağırlık, kilo değişimi, aldı mı verdi mi",
+        "hedef kilo, ideal kilo",
+        "yaş, kaç aylık, kaç yaşında, doğum tarihi",
+        "mama, marka, günlük gram miktarı, porsiyon ve kalori",
+        "protein ve yağ alımı",
+        "dışkı kalitesi ve sindirim",
+        "aşılar ve aşı tarihleri",
+        "günde kaç öğün",
+    ],
+}
+
+
+def topics_text(pet: Pet, lang: str = "en") -> str:
     """What the records can speak to, as a sentence to embed.
 
     Subjects rather than values: "weight" rather than "5.0 kg". A question is
     being matched against what the records are about, not against the numbers
     themselves.
+
+    Written in each language rather than translated at query time, for the same
+    reason the prompts are (see config.py): the model and the embedder both do
+    better with text that was written in the language, and a Turkish question
+    matching Turkish subjects scores far higher than the same question matching
+    English ones. In the demo "selam, kedim kaç aylık" was refused while "how
+    old is my cat" was answered from the same records.
     """
-    parts = [
-        f"{pet.name} the {pet.species}",
-        "body weight and weight trend",
-        "target weight",
-        "food, brand, daily amount in grams, portion and calories",
-        "protein and fat intake",
-        "stool quality and digestion",
-        "vaccinations and their due dates",
-        "feeding schedule and meals per day",
-    ]
-    if pet.breed:
-        parts.insert(1, pet.breed)
-    return ", ".join(parts)
+    if lang not in _TOPICS:
+        lang = config.DEFAULT_LANGUAGE
+
+    if lang == "tr":
+        species = "kedi" if pet.species == "cat" else "köpek"
+        head = f"{pet.name} adlı {species}"
+    else:
+        head = f"{pet.name} the {pet.species}"
+
+    # The breed name is deliberately not here either — "Sarman" is a label, not
+    # a question anyone asks the records.
+    return ", ".join([head] + _TOPICS[lang])
 
 
 def feeding_direction(data: dict) -> Optional[str]:
