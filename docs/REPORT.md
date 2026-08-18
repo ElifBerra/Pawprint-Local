@@ -213,12 +213,18 @@ hangi soruların cevaplanabileceği konusunda kör oluyor.
 | Cevaplanması gerekeni cevapladı | **17/17** |
 | Reddetmesi gerekeni reddetti | **6/6** |
 | Hata | 0 |
-| Medyan gecikme | 1.2s |
-| İlk kelimeye kadar | 0.4s |
-| Kapsam dışı gecikme | 0.2s |
+| Medyan gecikme | 0.9s |
+| Kapsam dışı gecikme | 0.0s |
+| Karar payı | **+0.120** |
 
-Gecikme rakamları GPU'lu makinede. CPU'da aynı sorular ~16 saniye sürüyor ve
-başka hiçbir şey değişmiyor (bkz. 4.5).
+Karar payı: en düşük cevaplanabilir skor (0.547) ile en yüksek cevaplanamaz skor
+(0.428) arasındaki mesafe. Eşiğin (0.48) yanılma payı bu.
+
+Hayvanın kayıtlarıyla birlikte, tarayıcının kullandığı akış yolunda ayrıca
+ölçüldü: medyan **1.2s**, ilk kelime **0.4s**.
+
+Gecikme rakamları GPU'lu makinede. CPU'da aynı sorular ~16 saniye sürüyor,
+doğruluk değişmiyor (bkz. 4.5).
 
 Karar payı: en düşük cevaplanabilir skor (0.548) ile en yüksek cevaplanamaz
 skor (0.427) arasında **+0.121**.

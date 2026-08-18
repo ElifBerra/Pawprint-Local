@@ -1,8 +1,13 @@
 # Değerlendirme
 
 Ölçümler `python -m scripts.bench` ile alındı. Sabit 8 soruluk set: 6'sı
-belgelerden cevaplanabilir, 2'si kapsam dışı. Donanım: Windows, CPU
-(GPU yok, tüm modeller `generic-cpu` varyantı).
+belgelerden cevaplanabilir, 2'si kapsam dışı. Donanım: Windows.
+
+**Koşu 1-10 CPU'da alındı.** O sırada makinede GPU olmadığını sanıyorduk;
+`generic-cpu` varyantıyla çalışıyorduk. Bunun neden yanlış olduğu ve gecikme
+rakamlarının nereye gittiği **Koşu 11**'de. Koşu 1-10 arasındaki karşılaştırmalar
+kendi içinde geçerli — hepsi aynı donanımda, tek değişkenle alındı — ama mutlak
+saniyeler artık geçerli değil.
 
 ## Koşu 1 — Referans
 
@@ -642,6 +647,64 @@ yazdı; okuduk ve yanlış yorumladık.
 karşılaştırılabiliyor. GPU varyantı olmayan modellerde otomatik olarak CPU'ya
 düşüyor. Yani proje GPU'suz makinelerde de çalışıyor — sadece daha yavaş, ve
 yukarıdaki bütün CPU ölçümleri o senaryo için geçerli.
+
+---
+
+## Koşu 12 — Doğru sayılar, yanlış yön
+
+Demo provasında yakalandı. Değerlendirme setinde olmayan bir soru:
+
+> **Should I reduce Khaleesi's portion?**
+>
+> *Yes, based on the reference material, if the ribs cannot be felt easily under
+> a thin layer of fat, the portion size should be reduced. Since Khaleesi's
+> current weight is 10.0 kg, which is 2.5 kg below the target weight, it
+> suggests that her portion size may need adjustment. Reassess in a month after
+> reducing the daily amount by roughly ten percent.*
+
+Khaleesi hedefinin **2.5 kg altında.** Cevap "azalt" diyor.
+
+**Bu bir retrieval hatası değil.** Doğru belgeler geldi, kayıtlar prompt'a
+girdi, model sayıyı doğru okudu ve *"2.5 kg below the target weight"* diye
+kendisi yazdı. Sonra genel bir kuralı ("kaburgalar hissedilmiyorsa azalt")
+farkın hangi yöne olduğuna bakmadan uyguladı.
+
+Prompt'taki her bilgi doğruydu. Eksik olan bir bilgi değil, bir **karar**dı.
+
+### Neden bu sınıf hata önemli
+
+Reddetme hatalarından farklı. Kapsam dışı bir soruya uydurma cevap veren model
+zararsızdır — kullanıcı saçmalığı görür. Burada cevap akıcı, kaynaklı, sayıları
+doğru ve **zayıf bir hayvanın yemeğini azaltmayı öneriyor.** Kullanıcının
+yanlışlığı fark etmesi için zaten bilmesi gerekiyor.
+
+### Çözüm
+
+Yönü karşılaştırma belirliyor, o hâlde kararı da karşılaştırma versin.
+`pet_context.feeding_direction()` kayıtlardan tek bir satır üretiyor:
+
+```
+FEEDING DIRECTION: this animal is UNDER its target weight. Reducing the
+amount of food would be wrong. Any advice must keep the amount the same or
+increase it, and a weight this far below target is worth raising with a vet.
+```
+
+Model artık yönü çıkarmıyor, cümleyi kuruyor. Aynı iş bölümü `insights.py`'de
+zaten vardı — aritmetiği kural yapar, model anlatır. Bu sefer beslenme yönü de
+o tarafa geçti.
+
+Ek olarak `SYSTEM_PROMPT_WITH_PET`'e tek kural eklendi: REFERANS genel olarak
+hayvanları anlatır, bu hayvanın hedefine göre ne tarafta olduğunu bilemez.
+
+Kural motorunda buna çok benzeyen bir uzlaştırma zaten vardı (kilo alan ve hedef
+üstündeki hayvana "daha çok ver" dememek). Aynı hatayı ikinci kez, başka bir
+yoldan yaptık — RAG cevabında. Kural motoruna koyduğumuz korumanın modele
+verdiğimiz prompt'ta olmadığını fark etmemiştik.
+
+`tests/test_pet_context.py` — 11 test, dördü doğrudan bu yönü sabitliyor.
+
+**Ders: modelin doğru sayıyı yazması, o sayıdan doğru sonucu çıkardığı anlamına
+gelmiyor.** Bu cevap prova olmasa videoya girecekti.
 
 ---
 

@@ -148,13 +148,26 @@ Get-Content (Get-ChildItem "$HOME\.pawprint-local\logs" -Recurse -File |
 
 ---
 
-## Execution provider'lar kayıtlı değil
+## ~~Execution provider'lar kayıtlı değil~~ — bu madde yanlıştı
 
-`check_env.py` çıktısında `CUDAExecutionProvider` ve `WebGpuExecutionProvider`
-için `is_registered=False` görünüyor. Bu makinede GPU yok, modeller `generic-cpu`
-varyantlarıyla çalışıyor. **Beklenen durum, düzeltilmesi gerekmiyor.**
+Burada iki hafta boyunca şu yazıyordu:
 
-## Ölçülen süreler (CPU, referans)
+> `check_env.py` çıktısında `is_registered=False` görünüyor. Bu makinede GPU yok,
+> modeller `generic-cpu` varyantlarıyla çalışıyor. **Beklenen durum, düzeltilmesi
+> gerekmiyor.**
+
+GPU vardı. `is_registered=False` "donanım yok" demek değil, "**bu provider'ı
+kaydetmedin, o yüzden ona ait model varyantlarını göremiyorsun**" demek.
+Kataloğun tek CPU varyantı göstermesi de bundandı — yorumu doğruladığını
+sanmıştık, oysa aynı hatanın ikinci yüzüydü.
+
+Düzeltmesi iki saniye sürdü ve medyan gecikmeyi 16.5s → 1.2s yaptı. Yukarıdaki
+"Cevaplar yavaş" bölümüne bakın.
+
+Kayıt not olarak duruyor: **bir teşhis çıktısını yorumladığınızda, yorumu da test
+edin.** Bu satır iki hafta boyunca doğru bilgiyi gösterdi.
+
+## Ölçülen süreler (CPU, referans — `PREFER_GPU = False`)
 
 | Adım | Süre |
 |---|---|
