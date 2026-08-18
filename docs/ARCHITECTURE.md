@@ -162,7 +162,7 @@ kural var: *"KAYITLAR'da geçmeyen hiçbir şeyi ölçülmüş gibi belirtme."*
   ╔═══════════════════════╗       │
   ║ 2. KAPI — kayıt eşiği ║       │
   ║ pet_context.relevance ║       │
-  ║ (EN: 0.32 · TR: 0.20) ║       │
+  ║ (EN: 0.40 · TR: 0.29) ║       │
   ╚═══════┬═══════════════╝       │
     ┌─────┴──────┐                │
   hayır        evet               │
@@ -216,6 +216,23 @@ payı +0.019 yerine +0.077 oldu — eşiği düşürseydik pay daralacaktı.
 **Eşik neden dile göre farklı.** Koleksiyon İngilizce. Türkçe soru çapraz dilde
 eşleşiyor ve aynı anlamdaki soru ~0.30 daha düşük skor alıyor. Tek eşik
 kullanılırken Türkçe soruların 8/8'i haksız yere reddediliyordu.
+
+**İkinci kapının eşiği neyin üstünde duruyor.** Kayıtların cevaplayamadığı iki
+ayrı soru sınıfı var ve aynı muameleyi görmemeleri gerekiyor:
+
+| | örnek | modele ulaşırsa |
+|---|---|---|
+| modelin bildiği | *"Fransa'nın başkenti"* | **cevaplıyor** — prompt tutmuyor |
+| alan boşluğu | *"köpeğime oturmayı nasıl öğretirim"* | reddediyor |
+
+Eşik yalnızca birincinin üstünde olmak zorunda; ikincisini katı prompt
+hallediyor (ölçüldü: `scripts/probe_records_only.py`). Bu ayrım yapılmadığında
+iki sınıfın skorları çakışıyor ve "güvenli eşik yok" sonucu çıkıyor — çalışan
+bir kapı için.
+
+Güvenli bant: EN 0.316–0.441 (eşik 0.40), TR 0.274–0.310 (eşik 0.29).
+Türkçedeki bant İngilizcenin üçte biri; dar olduğu için `config.py`'de not
+düşüldü. Ölçüm: `scripts/probe_pet_gate.py`, karar: `EVALUATION.md` Koşu 13.
 
 ---
 
@@ -485,8 +502,10 @@ de modele sorulacak sorular değil.
 | Çapraz dilli retrieval | Çalışıyor | Türkçe soru → İngilizce belge, 7/8 |
 | Gecikme (GPU) | 0.9s medyan | 23 soruluk değerlendirme, ısıtma sonrası |
 | Gecikme (CPU) | ~16s medyan | `PREFER_GPU = False` |
-| Kapsam dışı tespiti | 6/6 | Dördü alan içi ama belgelerde olmayan sorular |
-| Karar payı | +0.120 | 0.547 (en düşük evet) − 0.428 (en yüksek hayır) |
+| Kapsam dışı tespiti (belge kapısı) | 6/6 | Dördü alan içi ama belgelerde olmayan sorular |
+| Karar payı (belge kapısı) | +0.120 | 0.547 (en düşük evet) − 0.428 (en yüksek hayır) |
+| Karar payı (kayıt kapısı) | EN +0.125 · **TR +0.036** | Türkçe bant dar — `config.py` |
+| Değerlendirme kapsamı | Belge kapısı | `run_eval` hayvansız çalışıyor; kayıt kapısı `probe_pet_gate` ile ölçülüyor |
 | Ölçek | ~10.000 chunk | Ötesinde ANN indeksi gerekir |
 | Çoklu hayvan | Şema hazır, arayüz tek hayvanlı | `pet_id` her kayıtta var |
 | Mama kataloğu | Elle derlendi | Üretici etiket panellerinden; barkod/OCR yok |
