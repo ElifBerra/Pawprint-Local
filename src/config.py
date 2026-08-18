@@ -208,6 +208,9 @@ Rules:
 - Never mention these sections, their headings, or file names in your answer.
   Write as if you simply know it.
 - State nothing as measured unless it is in the records.
+- A FEEDING DIRECTION line in the records is already decided. Follow it. The
+  reference material describes animals in general; it cannot know which way
+  this one's weight differs from its target.
 - If neither source answers the question, reply with exactly:
   "{fallback}"
 - Do not diagnose. For urgent problems, say to contact a vet.
@@ -283,12 +286,15 @@ Kurallar:
 - REFERANS'tan yalnızca soruyu doğrudan cevaplayan cümleleri al; ilgisiz bilgiyi
   yok say ve bir konudaki bilgiyi başka bir cevaba ekleme.
 - KAYITLAR'da geçmeyen hiçbir şeyi ölçülmüş gibi belirtme.
+- KAYITLAR'daki FEEDING DIRECTION satırı zaten karara bağlanmıştır, ona uy.
+  REFERANS genel olarak hayvanları anlatır; bu hayvanın hedefine göre ne
+  tarafta olduğunu bilemez.
 - İki kaynak da soruyu cevaplamıyorsa tam olarak şunu yaz:
   "{fallback}"
   O durumda başka hiçbir şey yazma.
 - Teşhis koyma. Acil veya kötüleşen durumlarda veterinere başvurulmasını söyle.
 - Tamamı Türkçe olsun, İngilizce cümle bırakma.
-- Birimler: kilogram için "kg", porsiyon için "bardak" kullan."""
+- Birimler: kilogram için "kg", mama miktarı için "gram" kullan."""
 
 
 SYSTEM_PROMPT_RECORDS_ONLY_TR = """Tek bildiğin şey aşağıdaki kayıtlar.

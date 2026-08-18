@@ -237,9 +237,16 @@ harder test than an obviously unrelated one.
 | Retrieval accuracy (correct document in top 3) | 17/17 |
 | Answered when it should | 17/17 |
 | Declined when it should | 6/6 |
-| Median latency | 1.2s |
-| Time to first word | 0.4s |
-| Out-of-scope latency | 0.2s |
+| Median latency | 0.9s |
+| Out-of-scope latency | 0.0s |
+| Decision margin | +0.120 |
+
+Decision margin is the gap between the lowest-scoring answerable question (0.547)
+and the highest-scoring unanswerable one (0.428). It is the room the threshold
+has to be wrong in.
+
+Answering with the animal's records in the prompt, measured separately over the
+streaming path the browser uses: median **1.2s**, first word **0.4s**.
 
 **Latency depends on one setup step.** Foundry Local lists only the model
 variants built for execution providers that are *registered*, and nothing

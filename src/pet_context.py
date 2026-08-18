@@ -100,6 +100,39 @@ def topics_text(pet: Pet) -> str:
     return ", ".join(parts)
 
 
+def feeding_direction(data: dict) -> Optional[str]:
+    """Which way the food amount may move, decided by the rules not the model.
+
+    This exists because of a failure worth keeping in mind. Asked "should I
+    reduce Khaleesi's portion?" the model retrieved a passage saying that a
+    portion should be reduced when the ribs cannot be felt, noticed that the
+    weight differs from target, and answered "yes, reduce" — for an animal
+    2.5 kg *under* target. Every fact in the prompt was correct; the model
+    applied a general rule without checking which way the difference ran.
+
+    The direction is a comparison, so a comparison decides it. The model is
+    told the conclusion and left to phrase it.
+    """
+    over_kg = data.get("over_target_kg")
+    over_pct = data.get("over_target_pct")
+    if over_kg is None or over_pct is None:
+        return None
+
+    limit = insights.OVERWEIGHT_FRACTION * 100
+
+    if over_pct < -limit:
+        return ("FEEDING DIRECTION: this animal is UNDER its target weight. "
+                "Reducing the amount of food would be wrong. Any advice must "
+                "keep the amount the same or increase it, and a weight this "
+                "far below target is worth raising with a vet.")
+    if over_pct > limit:
+        return ("FEEDING DIRECTION: this animal is OVER its target weight. "
+                "A gradual reduction is appropriate — roughly ten percent, "
+                "reassessed in a month, with weekly weighing.")
+    return ("FEEDING DIRECTION: this animal is at its target weight. "
+            "The amount should stay where it is.")
+
+
 def build(pet: Pet, lang: str = "en") -> str:
     """A compact profile-and-records block for the prompt.
 
@@ -186,6 +219,13 @@ def build(pet: Pet, lang: str = "en") -> str:
         lines.append("ACTIVE WARNINGS — raise any that relate to the question:")
         for item in warnings[:MAX_WARNINGS]:
             lines.append(f"- {item.title('en')}")
+
+    # Last, and on its own, because it is the one line that must not be
+    # reasoned around. See feeding_direction() for what happened without it.
+    direction = feeding_direction(data)
+    if direction:
+        lines.append("")
+        lines.append(direction)
 
     return "\n".join(lines)
 

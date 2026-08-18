@@ -168,6 +168,31 @@ def get_embedding_client():
     return _clients["embedding"]
 
 
+# A real prompt, not "Ready?". Warming up on two words left the first genuine
+# question at 12.1s against about 1.5s for the ones after it — the runtime was
+# still building whatever it builds for a longer sequence. This filler is
+# roughly the length of an answer prompt with an animal's records in it.
+_WARM_UP_SYSTEM = (
+    "You are Pawprint, a pet health assistant.\n\n"
+    "This animal's records:\n"
+    "Name: Warmup\nSpecies: cat\nBreed: domestic shorthair\nAge: 3 years\n"
+    "Sex: female\nCurrent weight: 4.2 kg (measured 2026-01-01)\n"
+    "Target weight: 4.0 kg\nDifference from target: +0.2 kg (+5.0%)\n"
+    "Weight change over the last 3 weeks: +0.1 kg\n"
+    "Current food: Example Adult Chicken\nDaily amount: 55 g (210 kcal)\n"
+    "Calculated daily energy requirement: 205 kcal\n"
+    "Amount that would cover it: 54 g of this food\nMeals per day: 2\n"
+    "Stool normal in the last 30 days: 90%\n\n"
+    "Reference material:\n"
+    "Adult cats are usually fed twice a day. Portion sizes on the label are a "
+    "starting point and should be adjusted to the individual animal. Weigh the "
+    "food rather than measuring it by volume, since density varies between "
+    "products. Reassess body condition monthly and weigh weekly during any "
+    "change.\n\n"
+    "Rules:\n- At most three sentences.\n- Use the animal's actual numbers."
+)
+
+
 def warm_up() -> dict:
     """Load both models and actually run something through them.
 
@@ -202,8 +227,8 @@ def warm_up() -> dict:
         chat = get_chat_client()
         mark = time.perf_counter()
         chat.complete_chat([
-            {"role": "system", "content": "Reply with one word."},
-            {"role": "user", "content": "Ready?"},
+            {"role": "system", "content": _WARM_UP_SYSTEM},
+            {"role": "user", "content": "Is this amount right?"},
         ])
         report["chat"] = round(time.perf_counter() - mark, 1)
     except Exception as exc:
