@@ -17,9 +17,14 @@ which is a medical emergency, especially in male cats. Contact an emergency
 veterinary clinic right away.
 
 Sources: emergency-signs.md
-[14.2s]
+[1.3s]
 This is not veterinary advice. See a vet for anything urgent.
 ```
+
+<p align="center">
+  <img src="docs/img/pawprint-architecture-en.png" width="100%"
+       alt="Everything — models, database, server and interface — inside the user's own computer">
+</p>
 
 ## Why
 
@@ -87,25 +92,63 @@ to phrase an answer, not to calculate one.
 
 ## Two gates before the model
 
-A question only reaches the model if it clears one of two similarity checks:
+A question only reaches the model if it clears one of two similarity checks.
 
-- against the **documents** — 0.48 in English, 0.27 in Turkish, because a
-  Turkish question scores about 0.30 lower against an English collection
-- against **what the records are about** — 0.32, for questions the documents
-  reject but the animal's own data can answer
+```mermaid
+flowchart TD
+    Q(["question"]) --> EXP["query expansion<br/><i>species folded into the<br/>embedded text only</i>"]
+    EXP --> RET["retrieve<br/><i>44 chunks · cosine similarity · top 3</i>"]
+    RET --> G1{"<b>gate 1</b> — documents<br/>EN 0.48 · TR 0.27"}
+
+    G1 -->|clears| P1["prompt<br/><i>RECORDS + REFERENCE</i>"]
+    G1 -->|below| G2{"<b>gate 2</b> — records<br/>EN 0.40 · TR 0.29"}
+
+    G2 -->|clears| P2["prompt<br/><i>RECORDS only</i>"]
+    G2 -->|below| NO["<b>the model is never called</b><br/>“I don't have that information<br/>in my documents.”<br/><i>0 seconds</i>"]
+
+    P1 --> GEN["phi-3.5-mini<br/><i>streaming · 180 tokens</i>"]
+    P2 --> GEN
+    GEN --> OUT(["answer + sources + scores"])
+
+    classDef gate fill:#161b25,stroke:#f59e0b,stroke-width:2px,color:#e8ebf2
+    classDef stop fill:#1a1114,stroke:#ef4444,stroke-width:2px,color:#e8ebf2
+    classDef node fill:#11151d,stroke:#232a38,color:#e8ebf2
+    classDef term fill:#161b25,stroke:#3b82f6,stroke-width:2px,color:#e8ebf2
+    class G1,G2 gate
+    class NO stop
+    class EXP,RET,P1,P2,GEN node
+    class Q,OUT term
+```
 
 Below both, the assistant declines without generating anything: correct, and
-0.6 seconds instead of 15. This is architectural rather than a prompt
-instruction, because prompt instructions did not hold — the model answered
-"who won the 1998 World Cup" however firmly it was told it had no general
-knowledge.
+instant rather than a second and a half.
+
+This is architectural rather than a prompt instruction, because prompt
+instructions did not hold. Told as firmly as we could phrase it that it had no
+general knowledge, the model still answered "who won the 1998 World Cup".
+A model cannot be instructed out of knowing something. It can be not asked.
+
+The two gates guard different things, and the thresholds sit above different
+classes of question:
+
+| | example | if it reaches the model |
+|---|---|---|
+| the model knows it | *"what is the capital of France"* | **it answers** — no prompt holds |
+| domain gap | *"how do I train my puppy to sit"* | it refuses |
+
+Only the first needs the threshold above it; the second is handled by the
+records-only prompt, and that was measured rather than assumed. The gap between
+the lowest real question and the highest of the first class is 0.125 in
+English and 0.036 in Turkish — see
+[docs/EVALUATION.md](docs/EVALUATION.md) run 13.
 
 ## Requirements
 
 - Windows, macOS or Linux
 - Python 3.10 or newer (developed on 3.12)
 - About 4 GB of disk for the models
-- No GPU — everything runs on CPU
+- A GPU is optional. With one, answers take about a second; without, about
+  sixteen — and nothing else changes.
 
 The Foundry Local SDK bundles its own runtime, so the `foundry` CLI is not
 needed.
@@ -217,8 +260,9 @@ Everything tunable is in `src/config.py`:
 | `CHUNK_SIZE` | 200 | Target words per chunk |
 | `CHUNK_OVERLAP` | 30 | Words repeated between chunks |
 | `TOP_K` | 3 | Chunks placed in the prompt |
-| `SIM_THRESHOLDS` | en 0.48 / tr 0.27 | Below this, out of scope |
-| `PET_SIM_THRESHOLDS` | en 0.32 / tr 0.20 | Second gate, against the records |
+| `SIM_THRESHOLDS` | en 0.48 / tr 0.27 | Gate 1, against the documents |
+| `PET_SIM_THRESHOLDS` | en 0.40 / tr 0.29 | Gate 2, against the records |
+| `PREFER_GPU` | `True` | Register execution providers, use the GPU build |
 | `MAX_TOKENS` | 180 | Cap on answer length |
 | `CHAT_MODEL_ALIAS` | `phi-3.5-mini` | Generation model |
 | `EMBEDDING_MODEL_ALIAS` | `qwen3-embedding-0.6b` | Embedding model |
@@ -275,7 +319,7 @@ calculated portion lands inside the manufacturer's range in all three:
 ## Testing
 
 ```powershell
-pytest                                                # 87 unit tests, no models needed
+pytest                                                # 102 tests, no models needed
 python -m scripts.bench                               # 8-question latency check
 python -m tests.run_eval --save docs/eval-results.md  # full graded run
 ```
@@ -287,6 +331,15 @@ python scripts/check_env.py          # environment, catalogue, execution provide
 python scripts/hello_pet.py          # chat path, loads from cache
 python -m scripts.download_models    # downloads, with progress
 python -m scripts.embed_steps        # embedding path, step by step
+```
+
+Probes, for the decisions rather than the plumbing:
+
+```powershell
+python -m scripts.probe_providers     # what your machine can actually run
+python -m scripts.probe_query         # retrieval scores, with and without context
+python -m scripts.probe_pet_gate      # gate 2, scored by class, in both languages
+python -m scripts.probe_records_only  # what the model does when a gate is wrong
 ```
 
 ## Project layout
@@ -318,8 +371,8 @@ src/
 web/              browser interface — no framework, no build step, no CDN
 data/docs/        the document collection
 data/foods*.csv   food catalogue
-tests/            87 unit tests, plus the graded evaluation set
-scripts/          diagnostics, benchmarks, import tools
+tests/            102 tests, plus the graded evaluation set
+scripts/          diagnostics, benchmarks, probes, import tools
 docs/             architecture, evaluation, known issues
 ```
 
@@ -328,8 +381,14 @@ docs/             architecture, evaluation, known issues
 - **Not veterinary advice.** The assistant works from a small document
   collection and cannot examine an animal. Anything urgent needs a vet.
 - **Answers are in English.** Turkish generation was measured across four local
-  models and none met the bar; the interface, insights and vet report are fully
-  translated. See [docs/EVALUATION.md](docs/EVALUATION.md).
+  models and none met the bar — one reported a ten-month-old cat as ten years
+  old. The choice was not between good Turkish and poor Turkish but between a
+  correct English answer and a wrong one. Everything the rules write — the
+  interface, the insights, the vet report — is fully Turkish, because the model
+  does not write it. See [docs/EVALUATION.md](docs/EVALUATION.md).
+- **The Turkish gate has less room than the English one.** 0.036 against 0.125.
+  It works today; it is the first thing to check if a Turkish question is ever
+  wrongly refused, and it should be moved on a measurement.
 - **AAFCO figures are minimums, not targets.** A complete food meeting the
   minimum is not thereby ideal for a particular animal.
 - **Energy requirements are estimates.** Individual metabolism varies by around
@@ -350,10 +409,30 @@ to hang.
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — how the parts fit together
 - [docs/EVALUATION.md](docs/EVALUATION.md) — every tuning run, what was
-  measured, what was reverted and why
+  measured, what was reverted and why. Thirteen runs, including three where
+  the measurement contradicted what we expected.
 - [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) — troubleshooting
 - [docs/COLLABORATION.md](docs/COLLABORATION.md) — how the two of us worked on
   one machine
+
+## What we got wrong
+
+Kept because the corrections are the interesting part.
+
+**We read a diagnostic and believed our reading of it.** `is_registered=False`
+meant "you have not registered this provider, so you cannot see its models". We
+read it as "you have no GPU" and spent six tuning runs earning 2.5× on latency.
+The two-line call we had missed was worth 14×.
+
+**We evaluated the wrong thing for weeks.** `run_eval.py` never passes an
+animal, so the second gate was never in the evaluation at all. "6/6 refused"
+only ever tested the first gate. When we finally measured the second, it was
+clearing "what is the capital of France" by 0.004.
+
+**Correct numbers, wrong conclusion.** Asked whether to reduce a cat's portion,
+the model retrieved the right passages, wrote "2.5 kg below the target weight"
+itself, and still answered "yes, reduce". Nothing in the prompt was false. The
+direction of a comparison is now decided by the comparison, not the model.
 
 ## References
 
