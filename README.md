@@ -442,6 +442,21 @@ direction of a comparison is now decided by the comparison, not the model.
 - [Prompt engineering techniques](https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/prompt-engineering)
 - [SQLite](https://sqlite.org/index.html)
 
+
+<img width="1919" height="941" alt="image" src="https://github.com/user-attachments/assets/0691b5ee-c68e-4eed-b5f1-4a589e7595ec" />
+<img width="1919" height="941" alt="image" src="https://github.com/user-attachments/assets/b1e3ff31-3436-4c23-aab6-fd2e1a9faa95" />
+<img width="1919" height="941" alt="image" src="https://github.com/user-attachments/assets/d1c557b2-4cc3-4fab-8240-03a02fe7586d" />
+<img width="1919" height="943" alt="image" src="https://github.com/user-attachments/assets/642d1fda-dbc1-4d04-87f8-553bcddb5748" />
+<img width="1919" height="942" alt="image" src="https://github.com/user-attachments/assets/1d71def9-3591-488a-8d6a-886304466982" />
+<img width="1919" height="943" alt="image" src="https://github.com/user-attachments/assets/4179661b-591b-449e-aefe-35651c1e199b" />
+<img width="1919" height="939" alt="image" src="https://github.com/user-attachments/assets/019ae5ad-69be-4a4d-800f-23f19cd0b8df" />
+<img width="1919" height="943" alt="image" src="https://github.com/user-attachments/assets/c0ffc2fa-79ff-4989-b2a1-f27b03ede026" />
+<img width="1919" height="943" alt="image" src="https://github.com/user-attachments/assets/183ba278-836d-4099-ac6e-9b9e703b6c83" />
+<img width="1919" height="940" alt="image" src="https://github.com/user-attachments/assets/d8b1aade-9248-45df-9ef4-95d9495546f3" />
+<img width="514" height="719" alt="image" src="https://github.com/user-attachments/assets/92e45948-d877-4ee1-8b8e-d1d10ffca1a3" />
+
+
+
 ## Authors
 
 Elif Berra Çelik and Burak Kaymak.
