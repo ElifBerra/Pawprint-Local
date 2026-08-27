@@ -444,5 +444,5 @@ direction of a comparison is now decided by the comparison, not the model.
 
 ## Authors
 
-Elif Berra Çelik and Burak Deniz Kaymak.
+Elif Berra Çelik and Burak Kaymak.
 Microsoft AI Innovators summer program, 2026.
